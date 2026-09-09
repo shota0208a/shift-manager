@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Shift Manager</title>
+<style>
+:root{
+  --bg:#f6f7f9;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;
+  --sat:#eaf4ff;--sun:#fff0f2;--accent:#111827;--yellow:#fff4b8;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header{position:sticky;top:0;z-index:20;background:rgba(246,247,249,.94);backdrop-filter:blur(10px);padding:14px 14px 10px;border-bottom:1px solid var(--line)}
+h1{font-size:20px;margin:0 0 10px}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap}
+button,input,select{font:inherit}
+.btn{border:0;border-radius:12px;padding:10px 14px;background:#111827;color:#fff;font-weight:700}
+.btn.secondary{background:#fff;color:#111827;border:1px solid var(--line)}
+main{padding:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+.table-wrap{overflow:auto;-webkit-overflow-scrolling:touch}
+table{border-collapse:separate;border-spacing:0;min-width:900px;width:100%}
+th,td{border-right:1px solid var(--line);border-bottom:1px solid var(--line);text-align:center;min-width:95px;height:58px;padding:6px}
+th:first-child,td:first-child{position:sticky;left:0;z-index:5;background:#fff;min-width:120px}
+thead th{position:sticky;top:0;z-index:8;background:#fff;font-size:13px}
+thead th:first-child{z-index:10}
+.sat{background:var(--sat)!important}.sun{background:var(--sun)!important}
+.staff-cell{font-weight:700;text-align:left;padding-left:12px}
+.shift-btn{width:100%;height:100%;border:0;background:transparent;border-radius:10px;font-weight:700}
+.shift-btn:active{background:#f3f4f6}
+.empty{color:#c7cbd1}
+.footer-note{font-size:12px;color:var(--muted);padding:10px 2px}
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.38);display:none;align-items:flex-end;z-index:50}
+.modal-backdrop.show{display:flex}
+.modal{width:100%;background:#fff;border-radius:22px 22px 0 0;padding:18px;max-height:82vh;overflow:auto}
+.modal h2{margin:0 0 14px;font-size:20px}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+.field input,.field select{width:100%;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fff}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.actions{display:flex;gap:8px;margin-top:14px}
+.actions .btn{flex:1}
+.staff-list{margin-top:14px}
+.staff-item{display:flex;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.staff-item span{flex:1;font-weight:600}
+.small{padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:#fff}
+.danger{color:#b91c1c}
+.event-row{background:var(--yellow)!important;font-size:12px;font-weight:700}
+@media(min-width:700px){
+  main{max-width:1100px;margin:auto}
+  .modal-backdrop{align-items:center;justify-content:center}
+  .modal{max-width:480px;border-radius:22px}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>SHIFT MANAGER</h1>
+  <div class="toolbar">
+    <button class="btn" id="addStaffBtn">＋スタッフ</button>
+    <button class="btn secondary" id="manageBtn">スタッフ管理</button>
+    <button class="btn secondary" id="resetBtn">初期データに戻す</button>
+  </div>
+</header>
+
+<main>
+  <div class="card">
+    <div class="table-wrap">
+      <table id="shiftTable"></table>
+    </div>
+  </div>
+  <div class="footer-note">セルをタップすると勤務時間を編集できます。データはこのブラウザ内に保存されます。</div>
+</main>
+
+<div class="modal-backdrop" id="shiftModal">
+  <div class="modal">
+    <h2 id="shiftTitle">シフト編集</h2>
+    <div class="field">
+      <label>表示</label>
+      <input id="shiftValue" placeholder="例：18〜23 / 24〜L / after〜L">
+    </div>
+    <div class="actions">
+      <button class="btn secondary" id="clearShift">空欄にする</button>
+      <button class="btn" id="saveShift">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="staffModal">
+  <div class="modal">
+    <h2>スタッフ追加</h2>
+    <div class="field">
+      <label>スタッフ名</label>
+      <input id="staffName" placeholder="名前を入力">
+    </div>
+    <div class="actions">
+      <button class="btn secondary" data-close="staffModal">キャンセル</button>
+      <button class="btn" id="saveStaff">追加</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="manageModal">
+  <div class="modal">
+    <h2>スタッフ管理</h2>
+    <div id="staffList" class="staff-list"></div>
+    <div class="actions">
+      <button class="btn" data-close="manageModal">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const days = [
+  {label:'07',dow:'月',cls:'',event:'Salsa',party:'18〜23'},
+  {label:'08',dow:'火',cls:'',event:'Salsa',party:'18〜23'},
+  {label:'09',dow:'水',cls:'',event:'D-1',party:'18〜23'},
+  {label:'10',dow:'木',cls:'',event:'Salsa',party:'18〜23'},
+  {label:'11',dow:'金',cls:'',event:'Salsa',party:'18〜23'},
+  {label:'12',dow:'土',cls:'sat',event:'Salsa',party:'18〜23'},
+  {label:'13',dow:'日',cls:'sun',event:'euro star',party:'14〜20'}
+];
+
+const defaultData = {
+  staff:['Gian','Shota','Shoki','Sho','Taro'],
+  shifts:{
+    Gian:['19〜L','19〜L','','','24〜L','24〜L','13〜21'],
+    Shota:['23〜L','23〜L','23〜L','','24〜L','24〜L','24〜L'],
+    Shoki:['','24〜L','24〜L','','24〜L','','24〜L'],
+    Sho:['','19〜L','24〜L','','24〜L','24〜L','24〜L'],
+    Taro:['','18〜23','18〜5','18〜5','18〜5','18〜5','18〜5']
+  }
+};
+
+let data = load();
+let current = null;
+
+function load(){
+  try{
+    const saved = localStorage.getItem('shiftManagerStep1');
+    return saved ? JSON.parse(saved) : structuredClone(defaultData);
+  }catch(e){ return structuredClone(defaultData); }
+}
+function save(){
+  localStorage.setItem('shiftManagerStep1', JSON.stringify(data));
+  render();
+}
+function render(){
+  const table = document.getElementById('shiftTable');
+  let html = '<thead><tr><th>STAFF</th>';
+  for(const d of days) html += `<th class="${d.cls}">${d.label}<br>${d.dow}</th>`;
+  html += '</tr><tr><th class="event-row">private party</th>';
+  for(const d of days) html += `<th class="event-row ${d.cls}">${d.event}</th>`;
+  html += '</tr><tr><th class="event-row">party 内容</th>';
+  for(const d of days) html += `<th class="event-row ${d.cls}">${d.party}</th>`;
+  html += '</tr></thead><tbody>';
+
+  for(const name of data.staff){
+    html += `<tr><td class="staff-cell">${escapeHtml(name)}</td>`;
+    const arr = data.shifts[name] || Array(days.length).fill('');
+    days.forEach((d,i)=>{
+      const val = arr[i] || '';
+      html += `<td class="${d.cls}"><button class="shift-btn ${!val?'empty':''}" onclick="openShift('${encodeURIComponent(name)}',${i})">${escapeHtml(val || '＋')}</button></td>`;
+    });
+    html += '</tr>';
+  }
+  html += '</tbody>';
+  table.innerHTML = html;
+}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+
+window.openShift = function(encName, dayIndex){
+  const name = decodeURIComponent(encName);
+  current = {name, dayIndex};
+  document.getElementById('shiftTitle').textContent = `${name} / ${days[dayIndex].label}${days[dayIndex].dow}`;
+  document.getElementById('shiftValue').value = (data.shifts[name]||[])[dayIndex] || '';
+  show('shiftModal');
+  setTimeout(()=>document.getElementById('shiftValue').focus(),100);
+}
+
+function show(id){document.getElementById(id).classList.add('show')}
+function hide(id){document.getElementById(id).classList.remove('show')}
+
+document.getElementById('saveShift').onclick=()=>{
+  const v=document.getElementById('shiftValue').value.trim();
+  if(!data.shifts[current.name]) data.shifts[current.name]=Array(days.length).fill('');
+  data.shifts[current.name][current.dayIndex]=v;
+  save(); hide('shiftModal');
+};
+document.getElementById('clearShift').onclick=()=>{
+  if(!data.shifts[current.name]) data.shifts[current.name]=Array(days.length).fill('');
+  data.shifts[current.name][current.dayIndex]='';
+  save(); hide('shiftModal');
+};
+document.getElementById('addStaffBtn').onclick=()=>{document.getElementById('staffName').value='';show('staffModal')};
+document.getElementById('saveStaff').onclick=()=>{
+  const name=document.getElementById('staffName').value.trim();
+  if(!name) return;
+  if(data.staff.includes(name)) return alert('同じ名前のスタッフがいます');
+  data.staff.push(name); data.shifts[name]=Array(days.length).fill('');
+  save(); hide('staffModal');
+};
+document.getElementById('manageBtn').onclick=()=>{
+  renderStaffList(); show('manageModal');
+};
+function renderStaffList(){
+  const box=document.getElementById('staffList');
+  box.innerHTML=data.staff.map(name=>`
+    <div class="staff-item">
+      <span>${escapeHtml(name)}</span>
+      <button class="small" onclick="renameStaff('${encodeURIComponent(name)}')">名前変更</button>
+      <button class="small danger" onclick="deleteStaff('${encodeURIComponent(name)}')">削除</button>
+    </div>`).join('');
+}
+window.renameStaff=function(encName){
+  const oldName=decodeURIComponent(encName);
+  const newName=prompt('新しい名前',oldName);
+  if(!newName||newName===oldName)return;
+  if(data.staff.includes(newName))return alert('同じ名前があります');
+  const idx=data.staff.indexOf(oldName); data.staff[idx]=newName;
+  data.shifts[newName]=data.shifts[oldName]||Array(days.length).fill('');
+  delete data.shifts[oldName];
+  save(); renderStaffList();
+}
+window.deleteStaff=function(encName){
+  const name=decodeURIComponent(encName);
+  if(!confirm(`${name} を削除しますか？`))return;
+  data.staff=data.staff.filter(x=>x!==name); delete data.shifts[name];
+  save(); renderStaffList();
+}
+document.getElementById('resetBtn').onclick=()=>{
+  if(confirm('初期データに戻しますか？')){
+    data=structuredClone(defaultData); save();
+  }
+}
+document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>hide(b.dataset.close));
+document.querySelectorAll('.modal-backdrop').forEach(el=>el.addEventListener('click',e=>{if(e.target===el)hide(el.id)}));
+render();
+</script>
+</body>
+</html>
