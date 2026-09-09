@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>SHIFT MANAGER</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#f5f7fb;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;
+  --sat:#eaf4ff;--sun:#fff0f2;--accent:#111827;--blue:#2563eb;--yellow:#fff4b8;
+  --green:#047857;--red:#b91c1c;--orange:#b45309;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+body{min-height:100vh}
+button,input,select,textarea{font:inherit}
+button{cursor:pointer}
+header{position:sticky;top:0;z-index:30;background:rgba(245,247,251,.95);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.head{padding:12px 14px}
+h1{font-size:20px;margin:0}
+.sub{font-size:12px;color:var(--muted);margin-top:3px}
+.toolbar,.navrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.btn{border:0;border-radius:12px;padding:10px 14px;background:#111827;color:#fff;font-weight:800}
+.btn.secondary{background:#fff;color:#111827;border:1px solid var(--line)}
+.btn.blue{background:var(--blue)}
+.btn.green{background:var(--green)}
+.btn.danger{background:#fff;color:var(--red);border:1px solid #fecaca}
+.btn.small{padding:8px 10px;border-radius:10px;font-size:13px}
+.tabs{display:flex;border-top:1px solid var(--line);background:#fff;overflow:auto}
+.tab{flex:1;min-width:90px;padding:12px 10px;border:0;background:#fff;color:var(--muted);font-weight:800;border-bottom:3px solid transparent}
+.tab.active{color:var(--text);border-bottom-color:var(--text)}
+main{padding:12px;max-width:1200px;margin:auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;margin-bottom:12px}
+.section-title{font-size:16px;font-weight:900;padding:14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.section-title small{font-size:12px;color:var(--muted);font-weight:600}
+.notice{padding:12px 14px;font-size:13px;border-bottom:1px solid var(--line)}
+.ok{color:var(--green)}.warn{color:var(--orange)}.danger-text{color:var(--red)}
+.table-wrap{overflow:auto;-webkit-overflow-scrolling:touch}
+table{border-collapse:separate;border-spacing:0;min-width:980px;width:100%}
+th,td{border-right:1px solid var(--line);border-bottom:1px solid var(--line);text-align:center;min-width:105px;height:58px;padding:6px}
+th:first-child,td:first-child{position:sticky;left:0;z-index:5;background:#fff;min-width:130px}
+thead th{position:sticky;top:0;z-index:8;background:#fff;font-size:13px}
+thead th:first-child{z-index:10}
+.sat{background:var(--sat)!important}.sun{background:var(--sun)!important}
+.staff-cell{text-align:left;padding-left:12px;font-weight:900}
+.shift-btn{width:100%;height:100%;border:0;background:transparent;border-radius:10px;font-weight:900;color:var(--blue)}
+.shift-btn:active{background:#f3f4f6}.empty{color:#c7cbd1}
+.event-row{background:var(--yellow)!important;font-size:12px;font-weight:800}
+.badge{display:inline-block;padding:3px 7px;border-radius:999px;font-size:11px;font-weight:800;background:#eef2ff;color:#3730a3}
+.list{padding:0 14px}
+.item{display:flex;gap:10px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}
+.item-main{flex:1;min-width:0}.item-main b{display:block}.item-main small{color:var(--muted)}
+.item-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.month-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:1px;background:var(--line);border-top:1px solid var(--line)}
+.month-head,.month-cell{background:#fff;padding:7px;min-height:72px}
+.month-head{min-height:auto;text-align:center;font-size:12px;font-weight:900}
+.month-cell.sat{background:var(--sat)}.month-cell.sun{background:var(--sun)}
+.daynum{font-weight:900;font-size:13px}.month-shift{font-size:11px;margin-top:5px;line-height:1.35}
+.month-shift b{display:block;color:var(--blue);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.copybox{white-space:pre-wrap;background:#f9fafb;border:1px solid var(--line);border-radius:12px;padding:12px;font-size:13px;line-height:1.6;max-height:55vh;overflow:auto}
+.hidden{display:none!important}
+.footer-note{font-size:12px;color:var(--muted);padding:10px 2px}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:flex-end;z-index:100}
+.modal-bg.show{display:flex}
+.modal{width:100%;background:#fff;border-radius:22px 22px 0 0;padding:18px;max-height:86vh;overflow:auto}
+.modal h2{margin:0 0 14px;font-size:20px}
+.field{margin-bottom:12px}.field label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+.field input,.field select,.field textarea{width:100%;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fff}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.actions{display:flex;gap:8px;margin-top:14px}.actions .btn{flex:1}
+.auth-card{max-width:520px;margin:32px auto;background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px}
+.auth-card h2{margin-top:0}
+.setup-note{font-size:12px;color:var(--muted);line-height:1.55}
+.topright{margin-left:auto;display:flex;gap:8px;align-items:center}
+.role-pill{font-size:11px;background:#eef2ff;color:#3730a3;border-radius:999px;padding:4px 8px;font-weight:900}
+@media(min-width:700px){
+ .modal-bg{align-items:center;justify-content:center}
+ .modal{max-width:540px;border-radius:22px}
+ .month-cell{min-height:110px}
+}
+</style>
+</head>
+<body>
+
+<div id="setupView" class="auth-card hidden" style="display:none!important">
+  <h2>初期設定</h2>
+  <p class="setup-note">スタッフ全員で同じデータを共有するためにSupabaseを使います。Supabaseで作成した「Project URL」と「anon public key」を入力してください。入力値はこの端末だけに保存されます。</p>
+  <div class="field"><label>Supabase Project URL</label><input id="setupUrl" placeholder="https://xxxx.supabase.co"></div>
+  <div class="field"><label>Supabase anon public key</label><textarea id="setupKey" rows="5" placeholder="eyJ..."></textarea></div>
+  <button class="btn" id="saveSetup">設定を保存</button>
+  <p class="setup-note">まだSupabaseを作っていない場合は、同梱の README.md と supabase_setup.sql を使えばセットアップできます。</p>
+</div>
+
+<div id="authView" class="auth-card hidden">
+  <h2>SHIFT MANAGER</h2>
+  <div class="field"><label>メールアドレス</label><input id="authEmail" type="email" autocomplete="email"></div>
+  <div class="field"><label>パスワード</label><input id="authPassword" type="password" autocomplete="current-password"></div>
+  <div class="actions">
+    <button class="btn secondary" id="signupBtn">新規登録</button>
+    <button class="btn" id="loginBtn">ログイン</button>
+  </div>
+  <p class="setup-note">最初に登録したユーザーは自動で管理者になります。2人目以降はスタッフです。</p>
+  
+</div>
+
+<div id="appView" class="hidden">
+<header>
+  <div class="head">
+    <div style="display:flex;align-items:center;gap:8px">
+      <div>
+        <h1>SHIFT MANAGER</h1>
+        <div class="sub" id="storeTitle">共有シフト管理</div>
+      </div>
+      <div class="topright">
+        <span class="role-pill" id="rolePill"></span>
+        <button class="btn secondary small" id="logoutBtn">ログアウト</button>
+      </div>
+    </div>
+    <div class="toolbar admin-only">
+      <button class="btn" id="addStaffBtn">＋スタッフ</button>
+      <button class="btn secondary" id="manageStaffBtn">スタッフ管理</button>
+      <button class="btn secondary" id="eventBtn">イベント</button>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" data-tab="week">週間</button>
+    <button class="tab" data-tab="month">月間</button>
+    <button class="tab" data-tab="requests">希望</button>
+    <button class="tab" data-tab="share">LINE共有</button>
+  </div>
+</header>
+
+<main>
+  <section id="weekTab">
+    <div class="card">
+      <div class="section-title">
+        <span>週間シフト</span>
+        <div class="navrow">
+          <button class="btn secondary small" id="prevWeek">←</button>
+          <span id="weekLabel"></span>
+          <button class="btn secondary small" id="nextWeek">→</button>
+          <button class="btn secondary small" id="todayWeek">今週</button>
+        </div>
+      </div>
+      <div class="table-wrap"><table id="weekTable"></table></div>
+    </div>
+  </section>
+
+  <section id="monthTab" class="hidden">
+    <div class="card">
+      <div class="section-title">
+        <span>月間シフト</span>
+        <div class="navrow">
+          <button class="btn secondary small" id="prevMonth">←</button>
+          <span id="monthLabel"></span>
+          <button class="btn secondary small" id="nextMonth">→</button>
+        </div>
+      </div>
+      <div id="monthGrid"></div>
+    </div>
+  </section>
+
+  <section id="requestsTab" class="hidden">
+    <div class="card">
+      <div class="section-title">
+        <span>希望シフト</span>
+        <button class="btn blue small" id="newRequestBtn">＋希望提出</button>
+      </div>
+      <div class="notice" id="requestSummary"></div>
+      <div class="list" id="requestList"></div>
+    </div>
+  </section>
+
+  <section id="shareTab" class="hidden">
+    <div class="card">
+      <div class="section-title">
+        <span>LINE共有</span>
+        <button class="btn blue small" id="copyLineBtn">コピー</button>
+      </div>
+      <div style="padding:14px">
+        <div class="field">
+          <label>共有する週</label>
+          <input id="shareWeekDate" type="date">
+        </div>
+        <div class="copybox" id="linePreview"></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="footer-note">管理者のみシフト・スタッフ・イベントを編集できます。スタッフは希望提出と閲覧ができます。</div>
+</main>
+</div>
+
+<!-- Shift edit -->
+<div class="modal-bg" id="shiftModal">
+  <div class="modal">
+    <h2 id="shiftTitle">シフト編集</h2>
+    <div class="field"><label>表示</label><input id="shiftValue" placeholder="18〜23 / 24〜L / after〜L"></div>
+    <div class="field"><label>ポジション</label>
+      <select id="shiftRole">
+        <option value="">未設定</option><option>OPEN</option><option>BAR</option><option>FLOOR</option>
+        <option>ENTRANCE</option><option>VIP</option><option>AFTER</option><option>DJ</option><option>MANAGER</option>
+      </select>
+    </div>
+    <div class="actions">
+      <button class="btn secondary" id="clearShiftBtn">空欄</button>
+      <button class="btn" id="saveShiftBtn">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Staff -->
+<div class="modal-bg" id="staffModal">
+  <div class="modal">
+    <h2>スタッフ追加</h2>
+    <div class="field"><label>名前</label><input id="staffName"></div>
+    <div class="field"><label>メール（任意）</label><input id="staffEmail" type="email"></div>
+    <div class="actions">
+      <button class="btn secondary" data-close="staffModal">キャンセル</button>
+      <button class="btn" id="saveStaffBtn">追加</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="manageStaffModal">
+  <div class="modal">
+    <h2>スタッフ管理</h2>
+    <div id="staffManageList"></div>
+    <div class="actions"><button class="btn" data-close="manageStaffModal">閉じる</button></div>
+  </div>
+</div>
+
+<!-- Request -->
+<div class="modal-bg" id="requestModal">
+  <div class="modal">
+    <h2>希望シフト提出</h2>
+    <div class="field"><label>日付</label><input id="reqDate" type="date"></div>
+    <div class="field"><label>希望</label>
+      <select id="reqType">
+        <option value="available">出勤可能</option>
+        <option value="prefer">出勤希望</option>
+        <option value="prefer_off">できれば休み</option>
+        <option value="off">絶対休み</option>
+      </select>
+    </div>
+    <div class="row">
+      <div class="field"><label>開始</label><input id="reqStart" placeholder="18:00"></div>
+      <div class="field"><label>終了</label><input id="reqEnd" placeholder="LAST"></div>
+    </div>
+    <div class="field"><label>メモ</label><textarea id="reqMemo" rows="3"></textarea></div>
+    <div class="actions">
+      <button class="btn secondary" data-close="requestModal">キャンセル</button>
+      <button class="btn blue" id="saveRequestBtn">提出</button>
+    </div>
+  </div>
+</div>
+
+<!-- Event -->
+<div class="modal-bg" id="eventModal">
+  <div class="modal">
+    <h2>イベント登録</h2>
+    <div class="field"><label>日付</label><input id="eventDate" type="date"></div>
+    <div class="field"><label>イベント名</label><input id="eventName" placeholder="Salsa / private party"></div>
+    <div class="field"><label>時間</label><input id="eventTime" placeholder="18〜23"></div>
+    <div class="actions">
+      <button class="btn secondary" data-close="eventModal">キャンセル</button>
+      <button class="btn" id="saveEventBtn">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let supabaseClient=null, currentUser=null, profile=null;
+let staff=[], shifts=[], requests=[], events=[];
+let weekStart = getMonday(new Date()), monthCursor=new Date(new Date().getFullYear(),new Date().getMonth(),1);
+let activeShift=null;
+
+const $=id=>document.getElementById(id);
+const show=id=>$(id).classList.add('show');
+const hide=id=>$(id).classList.remove('show');
+const fmt=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const parseDate=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
+function getMonday(d){const x=new Date(d);const day=x.getDay();x.setDate(x.getDate()-(day===0?6:day-1));x.setHours(0,0,0,0);return x}
+function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x}
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+function isAdmin(){return profile?.role==='admin'}
+
+function initConfig(){
+  const url='https://qnozpavhwlekgbwednlh.supabase.co';
+  const key='sb_publishable_qEkraX86eJeE6g0SqFs06g_l_nbZOuK';
+  localStorage.setItem('sm_supabase_url',url);
+  localStorage.setItem('sm_supabase_key',key);
+  supabaseClient = window.supabase.createClient(url,key);
+  return true;
+}
+
+async function boot(){
+  if(!initConfig()) return;
+  const {data:{session}}=await supabaseClient.auth.getSession();
+  if(!session){$('authView').classList.remove('hidden');return}
+  currentUser=session.user;
+  await enterApp();
+}
+async function enterApp(){
+  $('setupView').classList.add('hidden');$('authView').classList.add('hidden');$('appView').classList.remove('hidden');
+  const {data:p}=await supabaseClient.from('profiles').select('*').eq('id',currentUser.id).single();
+  profile=p;
+  $('rolePill').textContent=isAdmin()?'管理者':'スタッフ';
+  document.querySelectorAll('.admin-only').forEach(x=>x.classList.toggle('hidden',!isAdmin()));
+  await loadAll();
+}
+async function loadAll(){
+  const [a,b,c,d]=await Promise.all([
+    supabaseClient.from('staff').select('*').order('sort_order').order('created_at'),
+    supabaseClient.from('shifts').select('*'),
+    supabaseClient.from('shift_requests').select('*').order('date',{ascending:true}),
+    supabaseClient.from('events').select('*')
+  ]);
+  staff=a.data||[];shifts=b.data||[];requests=c.data||[];events=d.data||[];
+  renderAll();
+}
+function renderAll(){renderWeek();renderMonth();renderRequests();renderLine();}
+
+$('saveSetup').onclick=()=>{
+  const url=$('setupUrl').value.trim(), key=$('setupKey').value.trim();
+  if(!url||!key)return alert('URLとキーを入力してください');
+  localStorage.setItem('sm_supabase_url',url);localStorage.setItem('sm_supabase_key',key);location.reload();
+};
+
+$('signupBtn').onclick=async()=>{
+  const email=$('authEmail').value.trim(),password=$('authPassword').value;
+  const {error}=await supabaseClient.auth.signUp({email,password});
+  if(error)return alert(error.message);
+  alert('登録しました。メール確認が有効な場合は確認後にログインしてください。');
+};
+$('loginBtn').onclick=async()=>{
+  const {data,error}=await supabaseClient.auth.signInWithPassword({email:$('authEmail').value.trim(),password:$('authPassword').value});
+  if(error)return alert(error.message);
+  currentUser=data.user;await enterApp();
+};
+$('logoutBtn').onclick=async()=>{await supabaseClient.auth.signOut();location.reload()};
+
+document.querySelectorAll('.tab').forEach(btn=>btn.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));btn.classList.add('active');
+  ['week','month','requests','share'].forEach(k=>$(k+'Tab').classList.toggle('hidden',k!==btn.dataset.tab));
+  if(btn.dataset.tab==='share')renderLine();
+});
+
+function renderWeek(){
+  const days=[...Array(7)].map((_,i)=>addDays(weekStart,i));
+  $('weekLabel').textContent=`${days[0].getMonth()+1}/${days[0].getDate()}〜${days[6].getMonth()+1}/${days[6].getDate()}`;
+  let h='<thead><tr><th>STAFF</th>';
+  days.forEach(d=>h+=`<th class="${d.getDay()===6?'sat':d.getDay()===0?'sun':''}">${String(d.getDate()).padStart(2,'0')}<br>${'日月火水木金土'[d.getDay()]}</th>`);
+  h+='</tr><tr><th class="event-row">EVENT</th>';
+  days.forEach(d=>{const e=events.find(x=>x.date===fmt(d));h+=`<th class="event-row">${esc(e?.name||'')}</th>`});
+  h+='</tr><tr><th class="event-row">時間</th>';
+  days.forEach(d=>{const e=events.find(x=>x.date===fmt(d));h+=`<th class="event-row">${esc(e?.time_text||'')}</th>`});
+  h+='</tr></thead><tbody>';
+  staff.filter(x=>x.active!==false).forEach(s=>{
+    h+=`<tr><td class="staff-cell">${esc(s.name)}</td>`;
+    days.forEach(d=>{
+      const sh=shifts.find(x=>x.staff_id===s.id&&x.date===fmt(d));
+      const cls=d.getDay()===6?'sat':d.getDay()===0?'sun':'';
+      if(isAdmin()){
+        h+=`<td class="${cls}"><button class="shift-btn ${sh?.display_text?'':'empty'}" onclick="openShift('${s.id}','${fmt(d)}')">${esc(sh?.display_text||'＋')}</button></td>`;
+      }else{
+        h+=`<td class="${cls}"><span style="font-weight:900;color:${sh?.display_text?'var(--blue)':'#c7cbd1'}">${esc(sh?.display_text||'—')}</span></td>`;
+      }
+    });
+    h+='</tr>';
+  });
+  h+='</tbody>';$('weekTable').innerHTML=h;
+}
+window.openShift=(staffId,date)=>{
+  if(!isAdmin())return;
+  const s=staff.find(x=>x.id===staffId), sh=shifts.find(x=>x.staff_id===staffId&&x.date===date);
+  activeShift={staffId,date,id:sh?.id||null};
+  $('shiftTitle').textContent=`${s?.name||''} / ${date}`;
+  $('shiftValue').value=sh?.display_text||'';$('shiftRole').value=sh?.role||'';show('shiftModal');
+};
+$('saveShiftBtn').onclick=async()=>{
+  const row={staff_id:activeShift.staffId,date:activeShift.date,display_text:$('shiftValue').value.trim(),role:$('shiftRole').value};
+  let q=activeShift.id?supabaseClient.from('shifts').update(row).eq('id',activeShift.id):supabaseClient.from('shifts').insert(row);
+  const {error}=await q;if(error)return alert(error.message);hide('shiftModal');await loadAll();
+};
+$('clearShiftBtn').onclick=async()=>{
+  if(activeShift.id){await supabaseClient.from('shifts').delete().eq('id',activeShift.id)}
+  hide('shiftModal');await loadAll();
+};
+$('prevWeek').onclick=()=>{weekStart=addDays(weekStart,-7);renderWeek();renderLine()};
+$('nextWeek').onclick=()=>{weekStart=addDays(weekStart,7);renderWeek();renderLine()};
+$('todayWeek').onclick=()=>{weekStart=getMonday(new Date());renderWeek();renderLine()};
+
+$('addStaffBtn').onclick=()=>show('staffModal');
+$('saveStaffBtn').onclick=async()=>{
+  const name=$('staffName').value.trim();if(!name)return;
+  const {error}=await supabaseClient.from('staff').insert({name,email:$('staffEmail').value.trim()||null,sort_order:staff.length});
+  if(error)return alert(error.message);$('staffName').value='';$('staffEmail').value='';hide('staffModal');await loadAll();
+};
+$('manageStaffBtn').onclick=()=>{renderStaffManage();show('manageStaffModal')};
+function renderStaffManage(){
+  $('staffManageList').innerHTML=staff.map(s=>`<div class="item"><div class="item-main"><b>${esc(s.name)}</b><small>${esc(s.email||'')}</small></div><div class="item-actions"><button class="btn secondary small" onclick="renameStaff('${s.id}')">名前変更</button><button class="btn danger small" onclick="deleteStaff('${s.id}')">削除</button></div></div>`).join('');
+}
+window.renameStaff=async(id)=>{
+  const s=staff.find(x=>x.id===id),name=prompt('新しい名前',s?.name||'');if(!name)return;
+  const {error}=await supabaseClient.from('staff').update({name}).eq('id',id);if(error)return alert(error.message);await loadAll();renderStaffManage();
+};
+window.deleteStaff=async(id)=>{
+  if(!confirm('削除しますか？'))return;
+  const {error}=await supabaseClient.from('staff').delete().eq('id',id);if(error)return alert(error.message);await loadAll();renderStaffManage();
+};
+
+$('newRequestBtn').onclick=()=>{$('reqDate').value=fmt(new Date());show('requestModal')};
+$('saveRequestBtn').onclick=async()=>{
+  const row={user_id:currentUser.id,date:$('reqDate').value,request_type:$('reqType').value,start_text:$('reqStart').value.trim()||null,end_text:$('reqEnd').value.trim()||null,memo:$('reqMemo').value.trim()||null,status:'pending'};
+  const {error}=await supabaseClient.from('shift_requests').insert(row);if(error)return alert(error.message);
+  hide('requestModal');await loadAll();
+};
+function requestLabel(t){return {available:'出勤可能',prefer:'出勤希望',prefer_off:'できれば休み',off:'絶対休み'}[t]||t}
+function renderRequests(){
+  let visible=isAdmin()?requests:requests.filter(r=>r.user_id===currentUser.id);
+  $('requestSummary').innerHTML=isAdmin()?`未処理 <b>${visible.filter(x=>x.status==='pending').length}</b> 件`:`自分の提出 <b>${visible.length}</b> 件`;
+  $('requestList').innerHTML=visible.length?visible.map(r=>{
+    const who=staff.find(s=>s.email&&s.email===r.user_email)?.name||r.user_email||'スタッフ';
+    return `<div class="item"><div class="item-main"><b>${esc(r.date)} <span class="badge">${esc(requestLabel(r.request_type))}</span></b><small>${esc([r.start_text,r.end_text].filter(Boolean).join('〜'))} ${esc(r.memo||'')}</small></div><div class="item-actions">${isAdmin()&&r.status==='pending'?`<button class="btn green small" onclick="setReqStatus('${r.id}','approved')">承認</button><button class="btn danger small" onclick="setReqStatus('${r.id}','rejected')">却下</button>`:`<span class="badge">${esc(r.status)}</span>`}</div></div>`;
+  }).join(''):'<div class="notice">まだ希望提出はありません。</div>';
+}
+window.setReqStatus=async(id,status)=>{await supabaseClient.from('shift_requests').update({status}).eq('id',id);await loadAll()};
+
+function renderMonth(){
+  $('monthLabel').textContent=`${monthCursor.getFullYear()}年${monthCursor.getMonth()+1}月`;
+  let html='<div class="month-grid">';
+  '月火水木金土日'.split('').forEach((x,i)=>html+=`<div class="month-head ${i===5?'sat':i===6?'sun':''}">${x}</div>`);
+  const first=new Date(monthCursor.getFullYear(),monthCursor.getMonth(),1);
+  const start=getMonday(first);
+  for(let i=0;i<42;i++){
+    const d=addDays(start,i),inMonth=d.getMonth()===monthCursor.getMonth(),cls=d.getDay()===6?'sat':d.getDay()===0?'sun':'';
+    const dayShifts=shifts.filter(x=>x.date===fmt(d)).map(x=>({x,s:staff.find(s=>s.id===x.staff_id)}));
+    html+=`<div class="month-cell ${cls}" style="${inMonth?'':'opacity:.35'}"><div class="daynum">${d.getDate()}</div><div class="month-shift">${dayShifts.slice(0,5).map(o=>`<b>${esc(o.s?.name||'')} ${esc(o.x.display_text||'')}</b>`).join('')}${dayShifts.length>5?`<small>+${dayShifts.length-5}名</small>`:''}</div></div>`;
+  }
+  html+='</div>';$('monthGrid').innerHTML=html;
+}
+$('prevMonth').onclick=()=>{monthCursor=new Date(monthCursor.getFullYear(),monthCursor.getMonth()-1,1);renderMonth()};
+$('nextMonth').onclick=()=>{monthCursor=new Date(monthCursor.getFullYear(),monthCursor.getMonth()+1,1);renderMonth()};
+
+$('eventBtn').onclick=()=>{$('eventDate').value=fmt(new Date());show('eventModal')};
+$('saveEventBtn').onclick=async()=>{
+  const row={date:$('eventDate').value,name:$('eventName').value.trim(),time_text:$('eventTime').value.trim()};
+  const existing=events.find(x=>x.date===row.date);
+  const q=existing?supabaseClient.from('events').update(row).eq('id',existing.id):supabaseClient.from('events').insert(row);
+  const {error}=await q;if(error)return alert(error.message);hide('eventModal');await loadAll();
+};
+
+function weekFromDate(d){return getMonday(d)}
+function buildLineText(start){
+  const days=[...Array(7)].map((_,i)=>addDays(start,i));
+  let out=`【${days[0].getMonth()+1}/${days[0].getDate()}〜${days[6].getMonth()+1}/${days[6].getDate()} SHIFT】\n`;
+  days.forEach(d=>{
+    out+=`\n■ ${d.getMonth()+1}/${d.getDate()} ${'日月火水木金土'[d.getDay()]}\n`;
+    const e=events.find(x=>x.date===fmt(d));if(e)out+=`EVENT: ${e.name}${e.time_text?' '+e.time_text:''}\n`;
+    staff.filter(s=>s.active!==false).forEach(s=>{
+      const sh=shifts.find(x=>x.staff_id===s.id&&x.date===fmt(d));if(sh?.display_text)out+=`${s.name}　${sh.display_text}${sh.role?' ('+sh.role+')':''}\n`;
+    });
+  });
+  return out.trim();
+}
+function renderLine(){
+  if(!$('shareWeekDate').value)$('shareWeekDate').value=fmt(weekStart);
+  $('linePreview').textContent=buildLineText(weekFromDate(parseDate($('shareWeekDate').value)));
+}
+$('shareWeekDate').onchange=renderLine;
+$('copyLineBtn').onclick=async()=>{
+  const text=$('linePreview').textContent;
+  try{await navigator.clipboard.writeText(text);alert('コピーしました');}
+  catch{prompt('コピーしてください',text)}
+};
+
+document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>hide(b.dataset.close));
+document.querySelectorAll('.modal-bg').forEach(el=>el.addEventListener('click',e=>{if(e.target===el)hide(el.id)}));
+
+boot();
+</script>
+</body>
+</html>
