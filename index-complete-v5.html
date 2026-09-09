@@ -1,0 +1,721 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>SHIFT MANAGER</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#f5f7fb;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;
+  --sat:#eaf4ff;--sun:#fff0f2;--accent:#111827;--blue:#2563eb;--yellow:#fff4b8;
+  --green:#047857;--red:#b91c1c;--orange:#b45309;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+body{min-height:100vh}
+button,input,select,textarea{font:inherit}
+button{cursor:pointer}
+header{position:sticky;top:0;z-index:30;background:rgba(245,247,251,.95);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.head{padding:12px 14px}
+h1{font-size:20px;margin:0}
+.sub{font-size:12px;color:var(--muted);margin-top:3px}
+.toolbar,.navrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.btn{border:0;border-radius:12px;padding:10px 14px;background:#111827;color:#fff;font-weight:800}
+.btn.secondary{background:#fff;color:#111827;border:1px solid var(--line)}
+.btn.blue{background:var(--blue)}
+.btn.green{background:var(--green)}
+.btn.danger{background:#fff;color:var(--red);border:1px solid #fecaca}
+.btn.small{padding:8px 10px;border-radius:10px;font-size:13px}
+.tabs{display:flex;border-top:1px solid var(--line);background:#fff;overflow:auto}
+.tab{flex:1;min-width:90px;padding:12px 10px;border:0;background:#fff;color:var(--muted);font-weight:800;border-bottom:3px solid transparent}
+.tab.active{color:var(--text);border-bottom-color:var(--text)}
+main{padding:12px;max-width:1200px;margin:auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;margin-bottom:12px}
+.section-title{font-size:16px;font-weight:900;padding:14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.section-title small{font-size:12px;color:var(--muted);font-weight:600}
+.notice{padding:12px 14px;font-size:13px;border-bottom:1px solid var(--line)}
+.ok{color:var(--green)}.warn{color:var(--orange)}.danger-text{color:var(--red)}
+.table-wrap{overflow:auto;-webkit-overflow-scrolling:touch}
+table{border-collapse:separate;border-spacing:0;min-width:980px;width:100%}
+th,td{border-right:1px solid var(--line);border-bottom:1px solid var(--line);text-align:center;min-width:105px;height:58px;padding:6px}
+th:first-child,td:first-child{position:sticky;left:0;z-index:5;background:#fff;min-width:130px}
+thead th{position:sticky;top:0;z-index:8;background:#fff;font-size:13px}
+thead th:first-child{z-index:10}
+.sat{background:var(--sat)!important}.sun{background:var(--sun)!important}
+.staff-cell{text-align:left;padding-left:12px;font-weight:900}
+.shift-btn{width:100%;height:100%;border:0;background:transparent;border-radius:10px;font-weight:900;color:var(--blue);line-height:1.25}
+.shift-btn:active{background:#f3f4f6}.empty{color:#c7cbd1}
+.event-row{background:var(--yellow)!important;font-size:12px;font-weight:800}
+.badge{display:inline-block;padding:3px 7px;border-radius:999px;font-size:11px;font-weight:800;background:#eef2ff;color:#3730a3}
+.list{padding:0 14px}
+.item{display:flex;gap:10px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}
+.item-main{flex:1;min-width:0}.item-main b{display:block}.item-main small{color:var(--muted)}
+.item-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.month-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:1px;background:var(--line);border-top:1px solid var(--line)}
+.month-head,.month-cell{background:#fff;padding:7px;min-height:72px}
+.month-head{min-height:auto;text-align:center;font-size:12px;font-weight:900}
+.month-cell.sat{background:var(--sat)}.month-cell.sun{background:var(--sun)}
+.daynum{font-weight:900;font-size:13px}.month-shift{font-size:11px;margin-top:5px;line-height:1.35}
+.month-shift b{display:block;color:var(--blue);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.copybox{white-space:pre-wrap;background:#f9fafb;border:1px solid var(--line);border-radius:12px;padding:12px;font-size:13px;line-height:1.6;max-height:55vh;overflow:auto}
+.hidden{display:none!important}
+.footer-note{font-size:12px;color:var(--muted);padding:10px 2px}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:flex-end;z-index:100}
+.modal-bg.show{display:flex}
+.modal{width:100%;background:#fff;border-radius:22px 22px 0 0;padding:18px;max-height:86vh;overflow:auto}
+.modal h2{margin:0 0 14px;font-size:20px}
+.field{margin-bottom:12px}.field label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+.field input,.field select,.field textarea{width:100%;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fff}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.actions{display:flex;gap:8px;margin-top:14px}.actions .btn{flex:1}
+.auth-card{max-width:520px;margin:32px auto;background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px}
+.auth-card h2{margin-top:0}
+.setup-note{font-size:12px;color:var(--muted);line-height:1.55}
+.topright{margin-left:auto;display:flex;gap:8px;align-items:center}
+.role-pill{font-size:11px;background:#eef2ff;color:#3730a3;border-radius:999px;padding:4px 8px;font-weight:900}
+.preset-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0 14px}
+.preset{border:1px solid var(--line);background:#fff;border-radius:12px;padding:11px 8px;font-weight:900;color:var(--text)}
+.preset.active{background:#111827;color:#fff;border-color:#111827}
+.quick-label{font-size:12px;color:var(--muted);font-weight:800;margin:4px 0 6px}
+.store-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 0 12px}
+.store-btn{border:1px solid var(--line);background:#fff;border-radius:12px;padding:10px 6px;font-weight:900}
+.draft-box{padding:12px 14px;background:#f8fafc;border-bottom:1px solid var(--line)}
+.draft-box b{display:block;margin-bottom:4px}
+.draft-box small{color:var(--muted);line-height:1.5}
+.req-dashboard{padding:12px 14px;border-bottom:1px solid var(--line);background:#fff}
+.req-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.req-stat{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:9px;text-align:center}
+.req-stat b{display:block;font-size:18px}.req-stat small{font-size:11px;color:var(--muted)}
+.req-type-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:0 0 14px}
+.req-type-btn{border:1px solid var(--line);background:#fff;border-radius:12px;padding:11px 8px;font-weight:900}
+.req-type-btn.active{background:#111827;color:#fff;border-color:#111827}
+.req-preview{background:#111827;color:#fff;border-radius:14px;padding:12px 14px;font-weight:900;text-align:center;margin:8px 0 14px;min-height:46px;display:flex;align-items:center;justify-content:center}
+.req-card{padding:12px 14px;border-bottom:1px solid var(--line)}
+.req-card-top{display:flex;gap:8px;align-items:flex-start;justify-content:space-between}
+.req-card-main{min-width:0;flex:1}.req-card-main b{display:block}.req-card-main small{display:block;color:var(--muted);margin-top:4px;line-height:1.4}
+.status-pending{background:#fff7ed;color:#9a3412}.status-approved{background:#ecfdf5;color:#047857}.status-rejected{background:#fef2f2;color:#b91c1c}
+.store-btn.active{background:#111827;color:#fff;border-color:#111827}
+@media(min-width:700px){
+ .modal-bg{align-items:center;justify-content:center}
+ .modal{max-width:540px;border-radius:22px}
+ .month-cell{min-height:110px}
+}
+</style>
+</head>
+<body>
+
+<div id="setupView" class="auth-card hidden" style="display:none!important">
+  <h2>初期設定</h2>
+  <p class="setup-note">スタッフ全員で同じデータを共有するためにSupabaseを使います。Supabaseで作成した「Project URL」と「anon public key」を入力してください。入力値はこの端末だけに保存されます。</p>
+  <div class="field"><label>Supabase Project URL</label><input id="setupUrl" placeholder="https://xxxx.supabase.co"></div>
+  <div class="field"><label>Supabase anon public key</label><textarea id="setupKey" rows="5" placeholder="eyJ..."></textarea></div>
+  <button class="btn" id="saveSetup">設定を保存</button>
+  <p class="setup-note">まだSupabaseを作っていない場合は、同梱の README.md と supabase_setup.sql を使えばセットアップできます。</p>
+</div>
+
+<div id="authView" class="auth-card hidden">
+  <h2>SHIFT MANAGER</h2>
+  <div class="field"><label>メールアドレス</label><input id="authEmail" type="email" autocomplete="email"></div>
+  <div class="field"><label>パスワード</label><input id="authPassword" type="password" autocomplete="current-password"></div>
+  <div class="actions">
+    <button class="btn secondary" id="signupBtn">新規登録</button>
+    <button class="btn" id="loginBtn">ログイン</button>
+  </div>
+  <p class="setup-note">最初に登録したユーザーは自動で管理者になります。2人目以降はスタッフです。</p>
+  
+</div>
+
+<div id="appView" class="hidden">
+<header>
+  <div class="head">
+    <div style="display:flex;align-items:center;gap:8px">
+      <div>
+        <h1>SHIFT MANAGER</h1>
+        <div class="sub" id="storeTitle">共有シフト管理</div>
+      </div>
+      <div class="topright">
+        <span class="role-pill" id="rolePill"></span>
+        <button class="btn secondary small" id="logoutBtn">ログアウト</button>
+      </div>
+    </div>
+    <div class="toolbar admin-only">
+      <button class="btn" id="addStaffBtn">＋スタッフ</button>
+      <button class="btn secondary" id="manageStaffBtn">スタッフ管理</button>
+      <button class="btn secondary" id="eventBtn">イベント</button>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" data-tab="week">週間</button>
+    <button class="tab" data-tab="month">月間</button>
+    <button class="tab" data-tab="requests">希望</button>
+    <button class="tab" data-tab="share">LINE共有</button>
+  </div>
+</header>
+
+<main>
+  <section id="weekTab">
+    <div class="card">
+      <div class="section-title">
+        <span>週間シフト</span>
+        <div class="navrow">
+          <button class="btn secondary small" id="prevWeek">←</button>
+          <span id="weekLabel"></span>
+          <button class="btn secondary small" id="nextWeek">→</button>
+          <button class="btn secondary small" id="todayWeek">今週</button>
+        </div>
+      </div>
+      <div class="table-wrap"><table id="weekTable"></table></div>
+    </div>
+  </section>
+
+  <section id="monthTab" class="hidden">
+    <div class="card">
+      <div class="section-title">
+        <span>月間シフト</span>
+        <div class="navrow">
+          <button class="btn secondary small" id="prevMonth">←</button>
+          <span id="monthLabel"></span>
+          <button class="btn secondary small" id="nextMonth">→</button>
+        </div>
+      </div>
+      <div id="monthGrid"></div>
+    </div>
+  </section>
+
+  <section id="requestsTab" class="hidden">
+    <div class="card">
+      <div class="section-title">
+        <span>希望シフト</span>
+        <button class="btn blue small" id="newRequestBtn">＋希望提出</button>
+      </div>
+      <div class="req-dashboard">
+        <div class="navrow" style="margin-top:0;justify-content:center">
+          <button class="btn secondary small" id="prevReqWeek">←</button>
+          <b id="reqWeekLabel"></b>
+          <button class="btn secondary small" id="nextReqWeek">→</button>
+          <button class="btn secondary small" id="todayReqWeek">今週</button>
+        </div>
+        <div class="req-stats" id="requestStats"></div>
+        <div class="navrow admin-only">
+          <button class="btn green small" id="approveAllBtn">未処理を一括承認</button>
+          <button class="btn blue small" id="autoDraftBtn">この週の自動シフト案</button>
+        </div>
+      </div>
+      <div class="draft-box admin-only">
+        <b>管理者の流れ：確認 → 承認 → 自動シフト案</b>
+        <small>この週の承認済み希望だけをシフト案へ反映します。作成後は「週間」画面で自由に修正できます。</small>
+      </div>
+      <div id="requestList"></div>
+    </div>
+  </section>
+
+  <section id="shareTab" class="hidden">
+    <div class="card">
+      <div class="section-title">
+        <span>LINE共有</span>
+        <button class="btn blue small" id="copyLineBtn">コピー</button>
+      </div>
+      <div style="padding:14px">
+        <div class="field">
+          <label>共有する週</label>
+          <input id="shareWeekDate" type="date">
+        </div>
+        <div class="copybox" id="linePreview"></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="footer-note">スタッフは希望をスマホで提出。管理者は週ごとに確認・承認→自動シフト案→手動調整→LINE共有まで行えます。</div>
+</main>
+</div>
+
+<!-- Shift edit -->
+<div class="modal-bg" id="shiftModal">
+  <div class="modal">
+    <h2 id="shiftTitle">シフト編集</h2>
+    <div class="field"><label>表示</label><input id="shiftValue" placeholder="例：24〜L NL MT / 18〜5 NL NP"></div>
+    <div class="preset-grid">
+      <button type="button" class="preset" data-shift-preset="18〜23">18〜23</button>
+      <button type="button" class="preset" data-shift-preset="18〜5">18〜5</button>
+      <button type="button" class="preset" data-shift-preset="18〜6">18〜6</button>
+      <button type="button" class="preset" data-shift-preset="19〜L">19〜L</button>
+      <button type="button" class="preset" data-shift-preset="23〜L">23〜L</button>
+      <button type="button" class="preset" data-shift-preset="24〜L">24〜L</button>
+      <button type="button" class="preset" data-shift-preset="after〜L">after〜L</button>
+      <button type="button" class="preset" data-shift-preset="OPEN〜L">OPEN〜L</button>
+      <button type="button" class="preset" data-shift-preset="休み">休み</button>
+    </div>
+
+    <div class="quick-label">店舗を追加（続けて押せます）</div>
+    <div class="store-grid">
+      <button type="button" class="store-btn" data-store="NP">NP</button>
+      <button type="button" class="store-btn" data-store="NL">NL</button>
+      <button type="button" class="store-btn" data-store="MT">MT</button>
+      <button type="button" class="store-btn" data-store="33">33</button>
+    </div>
+
+    <div class="field"><label>ポジション</label>
+      <select id="shiftRole">
+        <option value="">未設定</option><option>OPEN</option><option>BAR</option><option>FLOOR</option>
+        <option>ENTRANCE</option><option>VIP</option><option>AFTER</option><option>DJ</option><option>MANAGER</option>
+      </select>
+    </div>
+    <div class="actions">
+      <button class="btn secondary" id="clearShiftBtn">空欄</button>
+      <button class="btn" id="saveShiftBtn">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Staff -->
+<div class="modal-bg" id="staffModal">
+  <div class="modal">
+    <h2>スタッフ追加</h2>
+    <div class="field"><label>名前</label><input id="staffName"></div>
+    <div class="field"><label>メール（任意）</label><input id="staffEmail" type="email"></div>
+    <div class="actions">
+      <button class="btn secondary" data-close="staffModal">キャンセル</button>
+      <button class="btn" id="saveStaffBtn">追加</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="manageStaffModal">
+  <div class="modal">
+    <h2>スタッフ管理</h2>
+    <div id="staffManageList"></div>
+    <div class="actions"><button class="btn" data-close="manageStaffModal">閉じる</button></div>
+  </div>
+</div>
+
+<!-- Request -->
+<div class="modal-bg" id="requestModal">
+  <div class="modal">
+    <h2>希望シフト提出</h2>
+    <div class="field"><label>日付</label><input id="reqDate" type="date"></div>
+
+    <div class="quick-label">希望タイプ</div>
+    <div class="req-type-grid">
+      <button type="button" class="req-type-btn active" data-req-type="prefer">出勤希望</button>
+      <button type="button" class="req-type-btn" data-req-type="available">出勤可能</button>
+      <button type="button" class="req-type-btn" data-req-type="prefer_off">できれば休み</button>
+      <button type="button" class="req-type-btn" data-req-type="off">絶対休み</button>
+    </div>
+    <input id="reqType" type="hidden" value="prefer">
+
+    <div class="quick-label">時間</div>
+    <div class="preset-grid">
+      <button type="button" class="preset req-preset" data-start="18:00" data-end="23:00">18〜23</button>
+      <button type="button" class="preset req-preset" data-start="18:00" data-end="05:00">18〜5</button>
+      <button type="button" class="preset req-preset" data-start="18:00" data-end="06:00">18〜6</button>
+      <button type="button" class="preset req-preset" data-start="19:00" data-end="LAST">19〜L</button>
+      <button type="button" class="preset req-preset" data-start="23:00" data-end="LAST">23〜L</button>
+      <button type="button" class="preset req-preset" data-start="24:00" data-end="LAST">24〜L</button>
+      <button type="button" class="preset req-preset" data-start="after" data-end="LAST">after〜L</button>
+    </div>
+    <div class="row">
+      <div class="field"><label>開始（手入力も可）</label><input id="reqStart" placeholder="18:00"></div>
+      <div class="field"><label>終了</label><input id="reqEnd" placeholder="LAST"></div>
+    </div>
+
+    <div class="quick-label">店舗（必要な順に押す）</div>
+    <div class="store-grid">
+      <button type="button" class="store-btn req-store-btn" data-req-store="NP">NP</button>
+      <button type="button" class="store-btn req-store-btn" data-req-store="NL">NL</button>
+      <button type="button" class="store-btn req-store-btn" data-req-store="MT">MT</button>
+      <button type="button" class="store-btn req-store-btn" data-req-store="33">33</button>
+    </div>
+
+    <div class="req-preview" id="reqPreview">希望内容を選択してください</div>
+    <div class="field"><label>メモ（任意）</label><textarea id="reqMemo" rows="2" placeholder="遅入り希望など"></textarea></div>
+    <div class="actions">
+      <button class="btn secondary" data-close="requestModal">閉じる</button>
+      <button class="btn blue" id="saveRequestBtn">提出</button>
+    </div>
+    <button class="btn secondary" id="saveNextRequestBtn" style="width:100%;margin-top:8px">提出して翌日へ →</button>
+  </div>
+</div>
+
+<!-- Event -->
+<div class="modal-bg" id="eventModal">
+  <div class="modal">
+    <h2>イベント登録</h2>
+    <div class="field"><label>日付</label><input id="eventDate" type="date"></div>
+    <div class="field"><label>イベント名</label><input id="eventName" placeholder="Salsa / private party"></div>
+    <div class="field"><label>時間</label><input id="eventTime" placeholder="18〜23"></div>
+    <div class="actions">
+      <button class="btn secondary" data-close="eventModal">キャンセル</button>
+      <button class="btn" id="saveEventBtn">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let supabaseClient=null, currentUser=null, profile=null;
+let staff=[], shifts=[], requests=[], events=[];
+let weekStart = getMonday(new Date()), monthCursor=new Date(new Date().getFullYear(),new Date().getMonth(),1);
+let activeShift=null, requestWeekStart=getMonday(new Date()), reqStores=[];
+
+const $=id=>document.getElementById(id);
+const show=id=>$(id).classList.add('show');
+const hide=id=>$(id).classList.remove('show');
+const fmt=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const parseDate=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
+function getMonday(d){const x=new Date(d);const day=x.getDay();x.setDate(x.getDate()-(day===0?6:day-1));x.setHours(0,0,0,0);return x}
+function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x}
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+function isAdmin(){return profile?.role==='admin'}
+
+function initConfig(){
+  const url='https://qnozpavhwlekgbwednlh.supabase.co';
+  const key='sb_publishable_qEkraX86eJeE6g0SqFs06g_l_nbZOuK';
+  localStorage.setItem('sm_supabase_url',url);
+  localStorage.setItem('sm_supabase_key',key);
+  supabaseClient = window.supabase.createClient(url,key);
+  return true;
+}
+
+async function boot(){
+  if(!initConfig()) return;
+  const {data:{session}}=await supabaseClient.auth.getSession();
+  if(!session){$('authView').classList.remove('hidden');return}
+  currentUser=session.user;
+  await enterApp();
+}
+async function enterApp(){
+  $('setupView').classList.add('hidden');$('authView').classList.add('hidden');$('appView').classList.remove('hidden');
+  const {data:p}=await supabaseClient.from('profiles').select('*').eq('id',currentUser.id).single();
+  profile=p;
+  $('rolePill').textContent=isAdmin()?'管理者':'スタッフ';
+  document.querySelectorAll('.admin-only').forEach(x=>x.classList.toggle('hidden',!isAdmin()));
+  await loadAll();
+}
+async function loadAll(){
+  const [a,b,c,d]=await Promise.all([
+    supabaseClient.from('staff').select('*').order('sort_order').order('created_at'),
+    supabaseClient.from('shifts').select('*'),
+    supabaseClient.from('shift_requests').select('*').order('date',{ascending:true}),
+    supabaseClient.from('events').select('*')
+  ]);
+  staff=a.data||[];shifts=b.data||[];requests=c.data||[];events=d.data||[];
+  renderAll();
+}
+function renderAll(){renderWeek();renderMonth();renderRequests();renderLine();}
+
+$('saveSetup').onclick=()=>{
+  const url=$('setupUrl').value.trim(), key=$('setupKey').value.trim();
+  if(!url||!key)return alert('URLとキーを入力してください');
+  localStorage.setItem('sm_supabase_url',url);localStorage.setItem('sm_supabase_key',key);location.reload();
+};
+
+$('signupBtn').onclick=async()=>{
+  const email=$('authEmail').value.trim(),password=$('authPassword').value;
+  const {error}=await supabaseClient.auth.signUp({email,password});
+  if(error)return alert(error.message);
+  alert('登録しました。メール確認が有効な場合は確認後にログインしてください。');
+};
+$('loginBtn').onclick=async()=>{
+  const {data,error}=await supabaseClient.auth.signInWithPassword({email:$('authEmail').value.trim(),password:$('authPassword').value});
+  if(error)return alert(error.message);
+  currentUser=data.user;await enterApp();
+};
+$('logoutBtn').onclick=async()=>{await supabaseClient.auth.signOut();location.reload()};
+
+document.querySelectorAll('.tab').forEach(btn=>btn.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));btn.classList.add('active');
+  ['week','month','requests','share'].forEach(k=>$(k+'Tab').classList.toggle('hidden',k!==btn.dataset.tab));
+  if(btn.dataset.tab==='share')renderLine();
+});
+
+
+function shiftHtml(value){
+  const safe=esc(value||'');
+  return safe.replace(/\s*→\s*/g,'<br>→ ');
+}
+
+function renderWeek(){
+  const days=[...Array(7)].map((_,i)=>addDays(weekStart,i));
+  $('weekLabel').textContent=`${days[0].getMonth()+1}/${days[0].getDate()}〜${days[6].getMonth()+1}/${days[6].getDate()}`;
+  let h='<thead><tr><th>STAFF</th>';
+  days.forEach(d=>h+=`<th class="${d.getDay()===6?'sat':d.getDay()===0?'sun':''}">${String(d.getDate()).padStart(2,'0')}<br>${'日月火水木金土'[d.getDay()]}</th>`);
+  h+='</tr><tr><th class="event-row">EVENT</th>';
+  days.forEach(d=>{const e=events.find(x=>x.date===fmt(d));h+=`<th class="event-row">${esc(e?.name||'')}</th>`});
+  h+='</tr><tr><th class="event-row">時間</th>';
+  days.forEach(d=>{const e=events.find(x=>x.date===fmt(d));h+=`<th class="event-row">${esc(e?.time_text||'')}</th>`});
+  h+='</tr></thead><tbody>';
+  staff.filter(x=>x.active!==false).forEach(s=>{
+    h+=`<tr><td class="staff-cell">${esc(s.name)}</td>`;
+    days.forEach(d=>{
+      const sh=shifts.find(x=>x.staff_id===s.id&&x.date===fmt(d));
+      const cls=d.getDay()===6?'sat':d.getDay()===0?'sun':'';
+      if(isAdmin()){
+        h+=`<td class="${cls}"><button class="shift-btn ${sh?.display_text?'':'empty'}" onclick="openShift('${s.id}','${fmt(d)}')">${sh?.display_text?shiftHtml(sh.display_text):'＋'}</button></td>`;
+      }else{
+        h+=`<td class="${cls}"><span style="font-weight:900;color:${sh?.display_text?'var(--blue)':'#c7cbd1'}">${sh?.display_text?shiftHtml(sh.display_text):'—'}</span></td>`;
+      }
+    });
+    h+='</tr>';
+  });
+  h+='</tbody>';$('weekTable').innerHTML=h;
+}
+window.openShift=(staffId,date)=>{
+  if(!isAdmin())return;
+  const s=staff.find(x=>x.id===staffId), sh=shifts.find(x=>x.staff_id===staffId&&x.date===date);
+  activeShift={staffId,date,id:sh?.id||null};
+  $('shiftTitle').textContent=`${s?.name||''} / ${date}`;
+  $('shiftValue').value=sh?.display_text||'';$('shiftRole').value=sh?.role||'';
+  document.querySelectorAll('[data-shift-preset]').forEach(b=>b.classList.toggle('active',b.dataset.shiftPreset===$('shiftValue').value.trim()));
+  show('shiftModal');
+};
+
+function setPreset(value){
+  $('shiftValue').value=value;
+  document.querySelectorAll('[data-shift-preset]').forEach(b=>b.classList.toggle('active',b.dataset.shiftPreset===value));
+}
+document.querySelectorAll('[data-shift-preset]').forEach(b=>b.onclick=()=>setPreset(b.dataset.shiftPreset));
+document.querySelectorAll('[data-store]').forEach(b=>b.onclick=()=>{
+  const cur=$('shiftValue').value.trim();
+  if(!cur || cur==='休み') return;
+
+  // Store buttons append in the order tapped.
+  // Example: 24〜L -> 24〜L NL -> 24〜L NL MT
+  const stores=['NP','NL','MT','33'];
+  const tokens=cur.split(/\s+/).filter(Boolean);
+  const store=b.dataset.store;
+
+  // Avoid accidental immediate duplicate taps, but otherwise allow
+  // multiple stores in sequence.
+  if(tokens[tokens.length-1]!==store){
+    tokens.push(store);
+  }
+  $('shiftValue').value=tokens.join(' ');
+  document.querySelectorAll('[data-shift-preset]').forEach(x=>x.classList.remove('active'));
+});
+$('shiftValue').addEventListener('input',()=>document.querySelectorAll('[data-shift-preset]').forEach(b=>b.classList.toggle('active',b.dataset.shiftPreset===$('shiftValue').value.trim())));
+
+function requestLabel(t){return {available:'出勤可能',prefer:'出勤希望',prefer_off:'できれば休み',off:'絶対休み'}[t]||t}
+function statusLabel(s){return {pending:'未処理',approved:'承認済',rejected:'却下'}[s]||s}
+function statusClass(s){return `status-${s||'pending'}`}
+function requestMeta(memo){
+  const raw=memo||'';
+  const m=raw.match(/^\[\[STORES:([^\]]*)\]\]\s*/);
+  const stores=m&&m[1]?m[1].split(',').map(x=>x.trim()).filter(Boolean):[];
+  const clean=m?raw.slice(m[0].length):raw;
+  return {stores,memo:clean};
+}
+function encodeRequestMemo(stores,memo){
+  const meta=stores.length?`[[STORES:${stores.join(',')}]] `:'';
+  return meta+(memo||'').trim();
+}
+function normTime(v,isEnd=false){
+  const s=(v||'').trim();
+  if(!s)return '';
+  if(isEnd&&/^(last|l)$/i.test(s))return 'L';
+  return s.replace(':00','');
+}
+function requestToShiftText(r){
+  if(r.request_type==='off'||r.request_type==='prefer_off') return '休み';
+  const start=normTime(r.start_text),end=normTime(r.end_text,true);
+  let base='';
+  if(start&&end)base=`${start}〜${end}`;
+  else if(start)base=`${start}〜L`;
+  else base=r.request_type==='prefer'?'希望':'出勤可';
+  const {stores}=requestMeta(r.memo);
+  return `${base}${stores.length?' '+stores.join(' '):''}`;
+}
+function reqWeekEnd(){return addDays(requestWeekStart,6)}
+function isInRequestWeek(r){return r.date>=fmt(requestWeekStart)&&r.date<=fmt(reqWeekEnd())}
+function requestWho(r){return staff.find(s=>s.email&&(s.email||'').toLowerCase()===(r.user_email||'').toLowerCase())?.name||r.user_email||'スタッフ'}
+function updateReqPreview(){
+  const type=$('reqType').value;
+  let txt='';
+  if(type==='off')txt='絶対休み';
+  else if(type==='prefer_off')txt='できれば休み';
+  else{
+    const s=normTime($('reqStart').value),e=normTime($('reqEnd').value,true);
+    txt=s?(e?`${s}〜${e}`:`${s}〜L`):requestLabel(type);
+    if(reqStores.length)txt+=` ${reqStores.join(' ')}`;
+  }
+  $('reqPreview').textContent=txt||'希望内容を選択してください';
+}
+function resetRequestModal(date){
+  $('reqDate').value=date||fmt(new Date());
+  $('reqType').value='prefer';
+  $('reqStart').value='';$('reqEnd').value='';$('reqMemo').value='';reqStores=[];
+  document.querySelectorAll('[data-req-type]').forEach(b=>b.classList.toggle('active',b.dataset.reqType==='prefer'));
+  document.querySelectorAll('.req-preset,.req-store-btn').forEach(b=>b.classList.remove('active'));
+  updateReqPreview();
+}
+document.querySelectorAll('[data-req-type]').forEach(b=>b.onclick=()=>{
+  $('reqType').value=b.dataset.reqType;
+  document.querySelectorAll('[data-req-type]').forEach(x=>x.classList.toggle('active',x===b));
+  updateReqPreview();
+});
+document.querySelectorAll('.req-preset').forEach(b=>b.onclick=()=>{
+  $('reqStart').value=b.dataset.start;$('reqEnd').value=b.dataset.end;
+  document.querySelectorAll('.req-preset').forEach(x=>x.classList.toggle('active',x===b));
+  updateReqPreview();
+});
+document.querySelectorAll('.req-store-btn').forEach(b=>b.onclick=()=>{
+  const store=b.dataset.reqStore;
+  const i=reqStores.indexOf(store);
+  if(i>=0)reqStores.splice(i,1);else reqStores.push(store);
+  document.querySelectorAll('.req-store-btn').forEach(x=>x.classList.toggle('active',reqStores.includes(x.dataset.reqStore)));
+  updateReqPreview();
+});
+['reqStart','reqEnd'].forEach(id=>$(id).addEventListener('input',updateReqPreview));
+
+async function saveRequest(goNext=false){
+  const date=$('reqDate').value;if(!date)return alert('日付を選んでください。');
+  const type=$('reqType').value;
+  if(!['off','prefer_off'].includes(type)&&!$('reqStart').value.trim())return alert('勤務時間を選択してください。');
+  const row={user_id:currentUser.id,user_email:currentUser.email||null,date,request_type:type,start_text:$('reqStart').value.trim()||null,end_text:$('reqEnd').value.trim()||null,memo:encodeRequestMemo(reqStores,$('reqMemo').value),status:'pending'};
+  const existing=requests.find(r=>r.user_id===currentUser.id&&r.date===date);
+  const q=existing?supabaseClient.from('shift_requests').update(row).eq('id',existing.id):supabaseClient.from('shift_requests').insert(row);
+  const {error}=await q;if(error)return alert(error.message);
+  await loadAll();
+  if(goNext){
+    const next=addDays(parseDate(date),1);
+    const keep={type:$('reqType').value,start:$('reqStart').value,end:$('reqEnd').value,memo:$('reqMemo').value,stores:[...reqStores]};
+    $('reqDate').value=fmt(next);$('reqType').value=keep.type;$('reqStart').value=keep.start;$('reqEnd').value=keep.end;$('reqMemo').value=keep.memo;reqStores=keep.stores;
+    updateReqPreview();
+  }else hide('requestModal');
+}
+
+async function approveAllThisWeek(){
+  if(!isAdmin())return;
+  const ids=requests.filter(r=>isInRequestWeek(r)&&r.status==='pending').map(r=>r.id);
+  if(!ids.length)return alert('この週に未処理の希望はありません。');
+  if(!confirm(`${ids.length}件を一括承認しますか？`))return;
+  const {error}=await supabaseClient.from('shift_requests').update({status:'approved'}).in('id',ids);
+  if(error)return alert(error.message);await loadAll();
+}
+
+async function createAutoDraft(){
+  if(!isAdmin()) return;
+  const approved=requests.filter(r=>isInRequestWeek(r)&&r.status==='approved');
+  if(!approved.length){alert('この週に承認済みの希望シフトがありません。');return;}
+
+  const mapped=[],skipped=[];
+  for(const r of approved){
+    const email=(r.user_email||'').toLowerCase();
+    const s=staff.find(x=>(x.email||'').toLowerCase()===email);
+    if(!s){skipped.push(`${r.date} / ${requestWho(r)}`);continue;}
+    const existing=shifts.find(x=>x.staff_id===s.id&&x.date===r.date);
+    mapped.push({r,s,existing,text:requestToShiftText(r)});
+  }
+  if(!mapped.length){
+    alert('希望提出アカウントとスタッフ管理のメールアドレスが一致していません。スタッフ管理でメールを登録してください。');
+    return;
+  }
+  const overwriteCount=mapped.filter(x=>x.existing).length;
+  let msg=`この週の承認済み ${mapped.length}件からシフト案を作成します。`;
+  if(overwriteCount)msg+=`\n既存シフト ${overwriteCount}件は更新されます。`;
+  if(skipped.length)msg+=`\nメール不一致 ${skipped.length}件はスキップされます。`;
+  if(!confirm(msg))return;
+
+  for(const x of mapped){
+    const row={staff_id:x.s.id,date:x.r.date,display_text:x.text,role:''};
+    const q=x.existing?supabaseClient.from('shifts').update(row).eq('id',x.existing.id):supabaseClient.from('shifts').insert(row);
+    const {error}=await q;if(error){alert(`${x.s.name} ${x.r.date}: ${error.message}`);return;}
+  }
+  weekStart=new Date(requestWeekStart);
+  await loadAll();
+  alert('シフト案を作成しました。週間タブで確認・修正できます。');
+  document.querySelector('[data-tab="week"]').click();
+}
+
+function renderRequests(){
+  $('reqWeekLabel').textContent=`${requestWeekStart.getMonth()+1}/${requestWeekStart.getDate()}〜${reqWeekEnd().getMonth()+1}/${reqWeekEnd().getDate()}`;
+  let visible=requests.filter(r=>isInRequestWeek(r));
+  if(!isAdmin())visible=visible.filter(r=>r.user_id===currentUser.id);
+  visible.sort((a,b)=>a.date.localeCompare(b.date)||requestWho(a).localeCompare(requestWho(b)));
+  const pending=visible.filter(x=>x.status==='pending').length,approved=visible.filter(x=>x.status==='approved').length,total=visible.length;
+  $('requestStats').innerHTML=`<div class="req-stat"><b>${total}</b><small>提出</small></div><div class="req-stat"><b>${pending}</b><small>未処理</small></div><div class="req-stat"><b>${approved}</b><small>承認済</small></div>`;
+  if(!visible.length){$('requestList').innerHTML='<div class="notice">この週の希望提出はまだありません。</div>';return;}
+  $('requestList').innerHTML=visible.map(r=>{
+    const meta=requestMeta(r.memo),shift=requestToShiftText(r),who=requestWho(r);
+    const d=parseDate(r.date),dow='日月火水木金土'[d.getDay()];
+    let acts='';
+    if(isAdmin()){
+      if(r.status==='pending')acts=`<button class="btn green small" onclick="setReqStatus('${r.id}','approved')">承認</button><button class="btn danger small" onclick="setReqStatus('${r.id}','rejected')">却下</button>`;
+      else acts=`<button class="btn secondary small" onclick="setReqStatus('${r.id}','pending')">未処理に戻す</button>`;
+    }else if(r.user_id===currentUser.id&&r.status==='pending'){
+      acts=`<button class="btn danger small" onclick="deleteRequest('${r.id}')">削除</button>`;
+    }
+    return `<div class="req-card"><div class="req-card-top"><div class="req-card-main"><b>${d.getMonth()+1}/${d.getDate()}（${dow}） ${isAdmin()?esc(who):''}</b><small><strong>${esc(shift)}</strong> ・ ${esc(requestLabel(r.request_type))}${meta.memo?' / '+esc(meta.memo):''}</small></div><span class="badge ${statusClass(r.status)}">${esc(statusLabel(r.status))}</span></div>${acts?`<div class="item-actions" style="margin-top:8px">${acts}</div>`:''}</div>`;
+  }).join('');
+}
+
+window.setReqStatus=async(id,status)=>{const {error}=await supabaseClient.from('shift_requests').update({status}).eq('id',id);if(error)return alert(error.message);await loadAll()};
+window.deleteRequest=async(id)=>{if(!confirm('この希望を削除しますか？'))return;const {error}=await supabaseClient.from('shift_requests').delete().eq('id',id);if(error)return alert(error.message);await loadAll()};
+
+$('newRequestBtn').onclick=()=>{
+  const today=new Date(),inWeek=today>=requestWeekStart&&today<=reqWeekEnd();
+  resetRequestModal(fmt(inWeek?today:requestWeekStart));show('requestModal');
+};
+$('saveRequestBtn').onclick=()=>saveRequest(false);
+$('saveNextRequestBtn').onclick=()=>saveRequest(true);
+$('autoDraftBtn').onclick=createAutoDraft;
+$('approveAllBtn').onclick=approveAllThisWeek;
+$('prevReqWeek').onclick=()=>{requestWeekStart=addDays(requestWeekStart,-7);renderRequests()};
+$('nextReqWeek').onclick=()=>{requestWeekStart=addDays(requestWeekStart,7);renderRequests()};
+$('todayReqWeek').onclick=()=>{requestWeekStart=getMonday(new Date());renderRequests()};
+
+function renderMonth(){
+  $('monthLabel').textContent=`${monthCursor.getFullYear()}年${monthCursor.getMonth()+1}月`;
+  let html='<div class="month-grid">';
+  '月火水木金土日'.split('').forEach((x,i)=>html+=`<div class="month-head ${i===5?'sat':i===6?'sun':''}">${x}</div>`);
+  const first=new Date(monthCursor.getFullYear(),monthCursor.getMonth(),1);
+  const start=getMonday(first);
+  for(let i=0;i<42;i++){
+    const d=addDays(start,i),inMonth=d.getMonth()===monthCursor.getMonth(),cls=d.getDay()===6?'sat':d.getDay()===0?'sun':'';
+    const dayShifts=shifts.filter(x=>x.date===fmt(d)).map(x=>({x,s:staff.find(s=>s.id===x.staff_id)}));
+    html+=`<div class="month-cell ${cls}" style="${inMonth?'':'opacity:.35'}"><div class="daynum">${d.getDate()}</div><div class="month-shift">${dayShifts.slice(0,5).map(o=>`<b>${esc(o.s?.name||'')} ${esc(o.x.display_text||'')}</b>`).join('')}${dayShifts.length>5?`<small>+${dayShifts.length-5}名</small>`:''}</div></div>`;
+  }
+  html+='</div>';$('monthGrid').innerHTML=html;
+}
+$('prevMonth').onclick=()=>{monthCursor=new Date(monthCursor.getFullYear(),monthCursor.getMonth()-1,1);renderMonth()};
+$('nextMonth').onclick=()=>{monthCursor=new Date(monthCursor.getFullYear(),monthCursor.getMonth()+1,1);renderMonth()};
+
+$('eventBtn').onclick=()=>{$('eventDate').value=fmt(new Date());show('eventModal')};
+$('saveEventBtn').onclick=async()=>{
+  const row={date:$('eventDate').value,name:$('eventName').value.trim(),time_text:$('eventTime').value.trim()};
+  const existing=events.find(x=>x.date===row.date);
+  const q=existing?supabaseClient.from('events').update(row).eq('id',existing.id):supabaseClient.from('events').insert(row);
+  const {error}=await q;if(error)return alert(error.message);hide('eventModal');await loadAll();
+};
+
+function weekFromDate(d){return getMonday(d)}
+function buildLineText(start){
+  const days=[...Array(7)].map((_,i)=>addDays(start,i));
+  let out=`【${days[0].getMonth()+1}/${days[0].getDate()}〜${days[6].getMonth()+1}/${days[6].getDate()} SHIFT】\n`;
+  days.forEach(d=>{
+    out+=`\n■ ${d.getMonth()+1}/${d.getDate()} ${'日月火水木金土'[d.getDay()]}\n`;
+    const e=events.find(x=>x.date===fmt(d));if(e)out+=`EVENT: ${e.name}${e.time_text?' '+e.time_text:''}\n`;
+    staff.filter(s=>s.active!==false).forEach(s=>{
+      const sh=shifts.find(x=>x.staff_id===s.id&&x.date===fmt(d));if(sh?.display_text)out+=`${s.name}　${sh.display_text}${sh.role?' ('+sh.role+')':''}\n`;
+    });
+  });
+  return out.trim();
+}
+function renderLine(){
+  if(!$('shareWeekDate').value)$('shareWeekDate').value=fmt(weekStart);
+  $('linePreview').textContent=buildLineText(weekFromDate(parseDate($('shareWeekDate').value)));
+}
+$('shareWeekDate').onchange=renderLine;
+$('copyLineBtn').onclick=async()=>{
+  const text=$('linePreview').textContent;
+  try{await navigator.clipboard.writeText(text);alert('コピーしました');}
+  catch{prompt('コピーしてください',text)}
+};
+
+document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>hide(b.dataset.close));
+document.querySelectorAll('.modal-bg').forEach(el=>el.addEventListener('click',e=>{if(e.target===el)hide(el.id)}));
+
+boot();
+</script>
+</body>
+</html>
