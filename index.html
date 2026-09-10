@@ -172,7 +172,7 @@ thead th:first-child{z-index:10}
     <div style="display:flex;align-items:center;gap:8px">
       <div>
         <h1>SHIFT MANAGER</h1>
-        <div class="sub" id="storeTitle">共有シフト管理 V10</div>
+        <div class="sub" id="storeTitle">共有シフト管理 V10 TEST</div>
       </div>
       <div class="topright">
         <span class="role-pill" id="rolePill"></span>
@@ -242,6 +242,7 @@ thead th:first-child{z-index:10}
           <button class="btn blue small" id="autoDraftBtn">自動シフト設定</button>
         </div>
         <button class="btn blue workflow-btn admin-only" id="approveAndDraftBtn">未処理を全部承認 → 自動シフト作成</button>
+        <button class="btn secondary workflow-btn admin-only" id="seedTestBtn" style="margin-top:8px">🧪 9/14〜9/20 テスト10人を自動入力</button>
       </div>
       <div class="draft-box admin-only">
         <b>管理者の流れ：希望確認 → 承認 → 必要人数設定 → 自動作成</b>
@@ -343,6 +344,9 @@ thead th:first-child{z-index:10}
 <button type="button" class="preset req-preset" data-start="18:00" data-end="23:00">18〜23</button>
 <button type="button" class="preset req-preset" data-start="18:00" data-end="05:00">18〜5</button>
 <button type="button" class="preset req-preset" data-start="18:00" data-end="06:00">18〜6</button>
+<button type="button" class="preset req-preset" data-start="21:00" data-end="05:00">21〜5</button>
+<button type="button" class="preset req-preset" data-start="24:00" data-end="06:00">24〜6</button>
+<button type="button" class="preset req-preset" data-start="24:00" data-end="08:00">24〜8</button>
 <button type="button" class="preset req-preset" data-start="18:00" data-end="LAST">18〜L</button>
 <button type="button" class="preset req-preset" data-start="19:00" data-end="LAST">19〜L</button>
 <button type="button" class="preset req-preset" data-start="23:00" data-end="05:00">23〜5</button>
@@ -835,8 +839,8 @@ window.setReqStatus=async(id,status)=>{const {error}=await supabaseClient.from('
 window.deleteRequest=async(id)=>{if(!confirm('この希望を削除しますか？'))return;const {error}=await supabaseClient.from('shift_requests').delete().eq('id',id);if(error)return alert(error.message);await loadAll()};
 
 $('newRequestBtn').onclick=()=>{
-  const today=new Date(),inWeek=today>=requestWeekStart&&today<=reqWeekEnd();
-  resetRequestModal(fmt(inWeek?today:requestWeekStart));show('requestModal');
+  // 希望タブで表示中の週の月曜日を必ず初期日付にする（端末日付/UTCズレ防止）
+  resetRequestModal(fmt(requestWeekStart));show('requestModal');
 };
 $('saveRequestBtn').onclick=()=>saveRequest(false);
 $('saveNextRequestBtn').onclick=()=>saveRequest(true);
@@ -847,6 +851,70 @@ $('approveAllBtn').onclick=approveAllThisWeek;
 $('prevReqWeek').onclick=()=>{requestWeekStart=addDays(requestWeekStart,-7);renderRequests()};
 $('nextReqWeek').onclick=()=>{requestWeekStart=addDays(requestWeekStart,7);renderRequests()};
 $('todayReqWeek').onclick=()=>{requestWeekStart=getMonday(new Date());renderRequests()};
+
+
+async function seedTenPersonTest(){
+  if(!isAdmin())return;
+  const start='2026-09-14', end='2026-09-20';
+  if(!confirm('9/14〜9/20の希望データを一度消して、TEST-1〜TEST-10のテスト希望を自動入力します。\n\nスタッフ本体は消しません。進めますか？'))return;
+
+  const names=Array.from({length:10},(_,i)=>`TEST-${i+1}`);
+  const byName={};
+  staff.forEach(s=>{ if(names.includes(s.name)&&!byName[s.name]) byName[s.name]=s; });
+  let sort=staff.reduce((m,s)=>Math.max(m,Number(s.sort_order)||0),0);
+  for(const name of names){
+    if(byName[name])continue;
+    const row={name,email:null,active:true,sort_order:++sort};
+    const {data,error}=await supabaseClient.from('staff').insert(row).select().single();
+    if(error)return alert('スタッフ追加エラー: '+error.message);
+    byName[name]=data;
+  }
+
+  // その週の希望だけをクリーンにする（古い未紐付け希望も除去）
+  let q=supabaseClient.from('shift_requests').delete().gte('date',start).lte('date',end);
+  let {error}=await q;
+  if(error)return alert('古い希望の整理に失敗しました: '+error.message);
+
+  const plan={
+    'TEST-1':['23〜L','休み','23〜L','23〜L','24〜L','24〜L','24〜L'],
+    'TEST-2':['休み','休み','休み','休み','21〜5','休み','休み'],
+    'TEST-3':['18〜23','18〜5','休み','18〜5','18〜5','18〜5','18〜5'],
+    'TEST-4':['休み','休み','休み','休み','24〜L','休み','休み'],
+    'TEST-5':['休み','休み','休み','休み','休み','24〜8','休み'],
+    'TEST-6':['18〜5','18〜5','18〜5','18〜5','休み','休み','18〜5'],
+    'TEST-7':['休み','休み','24〜L','休み','24〜L','休み','休み'],
+    'TEST-8':['休み','24〜8','休み','休み','休み','24〜8','休み'],
+    'TEST-9':['18〜5','休み','18〜5','18〜5','18〜5','18〜5','18〜5'],
+    'TEST-10':['休み','24〜L','休み','24〜L','24〜L','24〜L','24〜L']
+  };
+  const parse={
+    '18〜23':['18:00','23:00'],'18〜5':['18:00','05:00'],'18〜6':['18:00','06:00'],
+    '21〜5':['21:00','05:00'],'24〜6':['24:00','06:00'],'23〜L':['23:00','LAST'],
+    '24〜L':['24:00','LAST'],'24〜8':['24:00','08:00'],'18〜L':['18:00','LAST']
+  };
+  const dates=['2026-09-14','2026-09-15','2026-09-16','2026-09-17','2026-09-18','2026-09-19','2026-09-20'];
+  const rows=[];
+  for(const name of names){
+    const sid=byName[name].id;
+    plan[name].forEach((v,i)=>{
+      const off=v==='休み', t=off?[null,null]:parse[v];
+      rows.push({
+        user_id:currentUser.id,user_email:currentUser.email||null,date:dates[i],
+        request_type:off?'off':'prefer',start_text:off?null:t[0],end_text:off?null:t[1],
+        memo:encodeRequestMemo([],`TESTデータ / ${name}`,sid,false),status:'approved'
+      });
+    });
+  }
+  ({error}=await supabaseClient.from('shift_requests').insert(rows));
+  if(error)return alert('テスト希望の登録エラー: '+error.message);
+
+  requestWeekStart=parseDate(start);
+  weekStart=parseDate(start);
+  await loadAll();
+  renderRequests();
+  alert('TEST-1〜TEST-10の希望を9/14〜9/20に入力しました。\n\n次は「自動シフト設定」を押して、必要人数と「必ずOPEN（TEST-9）」だけ設定してテストできます。');
+}
+$('seedTestBtn').onclick=seedTenPersonTest;
 
 function renderMonth(){
   $('monthLabel').textContent=`${monthCursor.getFullYear()}年${monthCursor.getMonth()+1}月`;
