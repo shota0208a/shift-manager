@@ -54,6 +54,25 @@ thead th:first-child{z-index:10}
 .coverage-ok{color:var(--green);font-weight:900}.coverage-short{color:var(--red);font-weight:900}
 .open-badge{display:block;width:max-content;margin:3px auto 0;padding:2px 6px;border-radius:999px;background:#dcfce7;color:#047857;font-size:10px;font-weight:900}
 @media(max-width:600px){table{min-width:820px}th,td{min-width:94px;height:54px;padding:4px}th:first-child,td:first-child{min-width:105px}.staff-cell{padding-left:8px}.shift-btn{font-size:13px}}
+
+.day-summary{padding:14px;background:#fff;border-bottom:1px solid var(--line)}
+.day-date-big{font-size:24px;font-weight:950;text-align:center;margin-bottom:12px}
+.day-nav{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:12px}
+.day-nav .btn{min-width:74px}
+.day-coverage{display:grid;grid-template-columns:1fr;gap:8px}
+.day-cover-row{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:#f8fafc}
+.day-cover-label{font-weight:900;font-size:15px}.day-cover-num{font-size:18px;font-weight:950;white-space:nowrap}
+.day-cover-row.okay .day-cover-num{color:var(--green)}
+.day-cover-row.short{background:#fff1f2;border-color:#fecdd3}.day-cover-row.short .day-cover-num{color:var(--red)}
+.day-staff-list{padding:8px 12px 14px}
+.day-shift-card{display:grid;grid-template-columns:minmax(90px,1fr) auto;align-items:center;gap:10px;padding:13px 4px;border-bottom:1px solid var(--line)}
+.day-shift-card:last-child{border-bottom:0}.day-staff-name{font-size:16px;font-weight:950}.day-shift-time{font-size:18px;font-weight:950;color:var(--blue);text-align:right}
+.day-open-badge{display:inline-block;margin-left:6px;padding:3px 7px;border-radius:999px;background:#dcfce7;color:#047857;font-size:10px;font-weight:950;vertical-align:middle}
+.day-empty{padding:24px 14px;text-align:center;color:var(--muted);font-weight:800}
+.day-unassigned{margin:4px 12px 14px;border:1px solid var(--line);border-radius:12px;background:#f9fafb;padding:10px 12px;font-size:12px;color:var(--muted)}
+.day-unassigned summary{font-weight:900;color:var(--text);cursor:pointer}
+.day-unassigned-names{margin-top:8px;line-height:1.8}
+@media(min-width:700px){.day-coverage{grid-template-columns:repeat(3,1fr)}.day-shift-card{grid-template-columns:1fr 1fr}}
 .event-row{background:var(--yellow)!important;font-size:12px;font-weight:800}
 .badge{display:inline-block;padding:3px 7px;border-radius:999px;font-size:11px;font-weight:800;background:#eef2ff;color:#3730a3}
 .list{padding:0 14px}
@@ -179,7 +198,7 @@ thead th:first-child{z-index:10}
     <div style="display:flex;align-items:center;gap:8px">
       <div>
         <h1>SHIFT MANAGER</h1>
-        <div class="sub" id="storeTitle">共有シフト管理 V10 TEST FIX2</div>
+        <div class="sub" id="storeTitle">共有シフト管理 V10 TEST DAY1</div>
       </div>
       <div class="topright">
         <span class="role-pill" id="rolePill"></span>
@@ -193,7 +212,8 @@ thead th:first-child{z-index:10}
     </div>
   </div>
   <div class="tabs">
-    <button class="tab active" data-tab="week">週間</button>
+    <button class="tab active" data-tab="day">日別</button>
+    <button class="tab" data-tab="week">週間</button>
     <button class="tab" data-tab="month">月間</button>
     <button class="tab" data-tab="requests">希望</button>
     <button class="tab" data-tab="share">LINE共有</button>
@@ -201,7 +221,24 @@ thead th:first-child{z-index:10}
 </header>
 
 <main>
-  <section id="weekTab">
+  <section id="dayTab">
+    <div class="card">
+      <div class="day-summary">
+        <div class="day-nav">
+          <button class="btn secondary small" id="prevDay">← 前日</button>
+          <button class="btn secondary small" id="todayDay">今日</button>
+          <button class="btn secondary small" id="nextDay">翌日 →</button>
+        </div>
+        <div class="day-date-big" id="dayLabel"></div>
+        <div class="day-coverage" id="dayCoverage"></div>
+      </div>
+      <div class="section-title"><span>出勤スタッフ</span><small id="dayStaffCount"></small></div>
+      <div id="dayStaffList" class="day-staff-list"></div>
+      <div id="dayUnassigned"></div>
+    </div>
+  </section>
+
+  <section id="weekTab" class="hidden">
     <div class="card">
       <div class="section-title">
         <span>週間シフト</span>
@@ -396,7 +433,8 @@ thead th:first-child{z-index:10}
 <script>
 let supabaseClient=null, currentUser=null, profile=null;
 let staff=[], shifts=[], requests=[], events=[], managerEmails=[];
-let weekStart = getMonday(new Date()), monthCursor=new Date(new Date().getFullYear(),new Date().getMonth(),1);
+let weekStart = getMonday(new Date()), dayCursor=new Date(), monthCursor=new Date(new Date().getFullYear(),new Date().getMonth(),1);
+dayCursor.setHours(0,0,0,0);
 let activeShift=null, requestWeekStart=getMonday(new Date()), reqStores=[];
 
 const $=id=>document.getElementById(id);
@@ -470,7 +508,7 @@ async function loadAll(){
   renderAll();
   applyPermissions();
 }
-function renderAll(){renderWeek();renderMonth();renderRequests();renderLine();}
+function renderAll(){renderDay();renderWeek();renderMonth();renderRequests();renderLine();}
 
 $('saveSetup').onclick=()=>{
   const url=$('setupUrl').value.trim(), key=$('setupKey').value.trim();
@@ -493,7 +531,8 @@ $('logoutBtn').onclick=async()=>{await supabaseClient.auth.signOut();location.re
 
 document.querySelectorAll('.tab').forEach(btn=>btn.onclick=()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));btn.classList.add('active');
-  ['week','month','requests','share'].forEach(k=>$(k+'Tab').classList.toggle('hidden',k!==btn.dataset.tab));
+  ['day','week','month','requests','share'].forEach(k=>$(k+'Tab').classList.toggle('hidden',k!==btn.dataset.tab));
+  if(btn.dataset.tab==='day')renderDay();
   if(btn.dataset.tab==='share')renderLine();
 });
 
@@ -520,6 +559,25 @@ function coverageCountForDay(date,cfg){
   const ranges=shifts.filter(x=>x.date===date&&x.display_text).map(x=>parseShiftRangeForCoverage(x.display_text,cfg)).filter(Boolean);
   const covers=(from,to)=>ranges.filter(r=>r.start<=from&&r.end>=to).length;
   return {open:covers(cfg.open,23),night:covers(23,29),after:covers(29,cfg.last)};
+}
+function hourlyCoverageForDay(date,cfg){
+  const ranges=shifts.filter(x=>x.date===date&&x.display_text).map(x=>parseShiftRangeForCoverage(x.display_text,cfg)).filter(Boolean);
+  const hour={};for(let h=cfg.open;h<cfg.last;h++)hour[h]=ranges.filter(r=>r.start<=h&&r.end>=h+1).length;
+  const segMin=(a,b)=>{const vals=[];for(let h=a;h<b;h++)vals.push(hour[h]||0);return vals.length?Math.min(...vals):0};
+  return {hour,open:segMin(cfg.open,23),night:segMin(23,29),after:segMin(29,cfg.last)};
+}
+function renderDay(){
+  if(!$('dayLabel'))return;
+  const date=fmt(dayCursor),d=parseDate(date),cfg=defaultDayConfig(date),c=hourlyCoverageForDay(date,cfg);
+  $('dayLabel').textContent=`${d.getMonth()+1}/${d.getDate()}（${'日月火水木金土'[d.getDay()]}）`;
+  const row=(label,now,need)=>`<div class="day-cover-row ${now>=need?'okay':'short'}"><span class="day-cover-label">${label}</span><span class="day-cover-num">${now}/${need}人 ${now>=need?'✓':'⚠ 不足'+(need-now)+'人'}</span></div>`;
+  $('dayCoverage').innerHTML=row(`${cfg.open}〜23`,c.open,cfg.minOpen)+row('23〜5',c.night,cfg.minNight)+row('5〜LAST',c.after,cfg.minAfter);
+  const active=staff.filter(x=>x.active!==false);
+  const assigned=active.map(s=>({s,sh:shifts.find(x=>String(x.staff_id)===String(s.id)&&x.date===date)})).filter(x=>x.sh?.display_text&&x.sh.display_text!=='休み');
+  $('dayStaffCount').textContent=`${assigned.length}人`;
+  $('dayStaffList').innerHTML=assigned.length?assigned.map(({s,sh})=>`<div class="day-shift-card" ${isAdmin()?`onclick="openShift('${s.id}','${date}')" style="cursor:pointer"`:''}><div class="day-staff-name">${esc(s.name)}${sh.role==='OPEN'?'<span class="day-open-badge">OPEN</span>':''}</div><div class="day-shift-time">${shiftHtml(sh.display_text)}</div></div>`).join(''):'<div class="day-empty">この日のシフトはまだありません</div>';
+  const unassigned=active.filter(s=>!assigned.some(x=>String(x.s.id)===String(s.id)));
+  $('dayUnassigned').innerHTML=unassigned.length?`<details class="day-unassigned"><summary>未配置・休み ${unassigned.length}人</summary><div class="day-unassigned-names">${unassigned.map(s=>esc(s.name)).join(' / ')}</div></details>`:'';
 }
 function renderWeekCoverage(days){
   $('weekCoverage').innerHTML=days.map(d=>{
@@ -776,7 +834,7 @@ function eventForDate(date){return events.find(e=>e.date===date&&!String(e.name|
 function renderAutoConfig(){const days=Array.from({length:7},(_,i)=>fmt(addDays(requestWeekStart,i)));$('autoDays').innerHTML=days.map(date=>{const cfg=defaultDayConfig(date),d=parseDate(date),ev=eventForDate(date),opts='<option value="">指定なし</option>'+staff.filter(s=>s.active!==false).map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');return `<div class="auto-day" data-auto-date="${date}"><div class="auto-day-head"><b>${d.getMonth()+1}/${d.getDate()}（${'日月火水木金土'[d.getDay()]}）</b><small>${ev?esc(ev.name):''}</small></div><div class="auto-grid"><div class="auto-field"><label>OPEN</label><input class="auto-open" type="number" value="${cfg.open}" min="12" max="24"></div><div class="auto-field"><label>LAST</label><select class="auto-last"><option value="33" ${cfg.last===33?'selected':''}>9:00</option><option value="34">10:00</option><option value="35" ${cfg.last===35?'selected':''}>11:00</option><option value="36">12:00</option></select></div><div class="auto-field"><label>OPEN〜23 最低</label><div class="auto-num"><button type="button" data-step="-1">−</button><input class="auto-min-open" type="number" value="${cfg.minOpen}" min="0"><button type="button" data-step="1">＋</button></div></div><div class="auto-field"><label>23〜5 最低</label><div class="auto-num"><button type="button" data-step="-1">−</button><input class="auto-min-night" type="number" value="${cfg.minNight}" min="0"><button type="button" data-step="1">＋</button></div></div><div class="auto-field auto-wide"><label>5〜LAST 最低</label><div class="auto-num"><button type="button" data-step="-1">−</button><input class="auto-min-after" type="number" value="${cfg.minAfter}" min="0"><button type="button" data-step="1">＋</button></div></div><div class="auto-field"><label>必ずOPEN ①</label><select class="auto-fixed1">${opts}</select></div><div class="auto-field"><label>必ずOPEN ②</label><select class="auto-fixed2">${opts}</select></div></div></div>`}).join('');document.querySelectorAll('#autoDays [data-step]').forEach(btn=>btn.onclick=()=>{const input=btn.parentElement.querySelector('input');input.value=Math.max(0,Number(input.value||0)+Number(btn.dataset.step))})}
 function readAutoConfigs(){return [...document.querySelectorAll('.auto-day')].map(el=>({date:el.dataset.autoDate,open:Number(el.querySelector('.auto-open').value||18),last:Number(el.querySelector('.auto-last').value||33),minOpen:Number(el.querySelector('.auto-min-open').value||0),minNight:Number(el.querySelector('.auto-min-night').value||0),minAfter:Number(el.querySelector('.auto-min-after').value||0),fixed1:el.querySelector('.auto-fixed1').value,fixed2:el.querySelector('.auto-fixed2').value}))}
 async function createAutoDraft(){if(!isAdmin())return;const approved=requests.filter(r=>isInRequestWeek(r)&&r.status==='approved'&&requestStaff(r));if(!approved.length)return alert('この週に承認済みの希望シフトがありません。');renderAutoConfig();show('autoConfigModal')}
-async function runAutoSchedule(){if(!isAdmin())return;const configs=readAutoConfigs(),allAssignments=[],warnings=[];for(const cfg of configs){const people=[];for(const r of requests.filter(r=>r.date===cfg.date&&r.status==='approved'&&requestStaff(r))){const s=requestStaff(r),av=requestAvailability(r,cfg);if(s&&av)people.push({staff:s,request:r,av,candidates:candidateTemplates(av,cfg)})}const as=[];for(const id of [cfg.fixed1,cfg.fixed2].filter(Boolean)){if(as.some(a=>String(a.staff.id)===String(id)))continue;const p=people.find(x=>String(x.staff.id)===String(id));if(!p){warnings.push(`${cfg.date}: 固定OPENスタッフが希望未提出`);continue}const c=p.candidates.filter(x=>x.start===cfg.open).sort((a,b)=>(b.end-b.start)-(a.end-a.start))[0];if(!c){warnings.push(`${cfg.date}: ${p.staff.name} はOPENから勤務不可`);continue}as.push({...c,staff:p.staff,request:p.request,fixed:true})}let guard=0;while(deficits(coverageForAssignments(as,cfg),cfg).length&&guard++<50){const best=chooseBestCandidate(people,as,cfg);if(!best)break;as.push(best)}optimizeAssignments(as,people,cfg);const rem=deficits(coverageForAssignments(as,cfg),cfg);if(rem.length){let groups=[],cur=null;for(const x of rem){if(!cur||x.h!==cur.end||x.d!==cur.d){cur={start:x.h,end:x.h+1,d:x.d};groups.push(cur)}else cur.end=x.h+1}groups.forEach(g=>warnings.push(`${cfg.date}: ${displayHour(g.start,cfg.last)}〜${displayHour(g.end,cfg.last)} ${g.d}人不足`))}as.forEach(a=>allAssignments.push({cfg,...a}))}if(!allAssignments.length)return alert('条件に合うシフトを作成できませんでした。');if(!confirm(`${allAssignments.length}件のNPシフト案を作成します。${warnings.length?`\n不足・確認事項 ${warnings.length}件あり`:''}`))return;for(const a of allAssignments){const row={staff_id:a.staff.id,date:a.cfg.date,display_text:formatAssignment(a,a.cfg),role:a.fixed?'OPEN':''};const {error}=await supabaseClient.from('shifts').upsert(row,{onConflict:'staff_id,date'});if(error)return alert(error.message)}hide('autoConfigModal');weekStart=new Date(requestWeekStart);await loadAll();document.querySelector('[data-tab="week"]').click();alert(warnings.length?'シフト案を作成しました。\n\n'+warnings.slice(0,20).join('\n'):'必要人数を満たすシフト案を作成しました。')}
+async function runAutoSchedule(){if(!isAdmin())return;const configs=readAutoConfigs(),allAssignments=[],warnings=[];for(const cfg of configs){const people=[];for(const r of requests.filter(r=>r.date===cfg.date&&r.status==='approved'&&requestStaff(r))){const s=requestStaff(r),av=requestAvailability(r,cfg);if(s&&av)people.push({staff:s,request:r,av,candidates:candidateTemplates(av,cfg)})}const as=[];for(const id of [cfg.fixed1,cfg.fixed2].filter(Boolean)){if(as.some(a=>String(a.staff.id)===String(id)))continue;const p=people.find(x=>String(x.staff.id)===String(id));if(!p){warnings.push(`${cfg.date}: 固定OPENスタッフが希望未提出`);continue}const c=p.candidates.filter(x=>x.start===cfg.open).sort((a,b)=>(b.end-b.start)-(a.end-a.start))[0];if(!c){warnings.push(`${cfg.date}: ${p.staff.name} はOPENから勤務不可`);continue}as.push({...c,staff:p.staff,request:p.request,fixed:true})}let guard=0;while(deficits(coverageForAssignments(as,cfg),cfg).length&&guard++<50){const best=chooseBestCandidate(people,as,cfg);if(!best)break;as.push(best)}optimizeAssignments(as,people,cfg);const rem=deficits(coverageForAssignments(as,cfg),cfg);if(rem.length){let groups=[],cur=null;for(const x of rem){if(!cur||x.h!==cur.end||x.d!==cur.d){cur={start:x.h,end:x.h+1,d:x.d};groups.push(cur)}else cur.end=x.h+1}groups.forEach(g=>warnings.push(`${cfg.date}: ${displayHour(g.start,cfg.last)}〜${displayHour(g.end,cfg.last)} ${g.d}人不足`))}as.forEach(a=>allAssignments.push({cfg,...a}))}if(!allAssignments.length)return alert('条件に合うシフトを作成できませんでした。');if(!confirm(`${allAssignments.length}件のNPシフト案を作成します。${warnings.length?`\n不足・確認事項 ${warnings.length}件あり`:''}`))return;for(const a of allAssignments){const row={staff_id:a.staff.id,date:a.cfg.date,display_text:formatAssignment(a,a.cfg),role:a.fixed?'OPEN':''};const del=await supabaseClient.from('shifts').delete().eq('staff_id',a.staff.id).eq('date',a.cfg.date);if(del.error)return alert('既存シフトの更新準備に失敗しました: '+del.error.message);const ins=await supabaseClient.from('shifts').insert(row);if(ins.error)return alert('シフト保存に失敗しました: '+ins.error.message)}hide('autoConfigModal');weekStart=new Date(requestWeekStart);dayCursor=new Date(requestWeekStart);await loadAll();document.querySelector('[data-tab="day"]').click();alert(warnings.length?'シフト案を作成しました。\n\n'+warnings.slice(0,20).join('\n'):'必要人数を満たすシフト案を作成しました。')}
 async function approveAndCreateDraft(){if(!isAdmin())return;const pending=requests.filter(r=>isInRequestWeek(r)&&r.status==='pending');if(pending.length){if(!confirm(`この週の未処理 ${pending.length}件をすべて承認して、自動シフト設定へ進みますか？`))return;const {error}=await supabaseClient.from('shift_requests').update({status:'approved'}).in('id',pending.map(r=>r.id));if(error)return alert(error.message);await loadAll()}await createAutoDraft()}
 
 function consecutiveLabel(rows){
@@ -864,6 +922,11 @@ function renderRequests(){
 
 window.setReqStatus=async(id,status)=>{const {error}=await supabaseClient.from('shift_requests').update({status}).eq('id',id);if(error)return alert(error.message);await loadAll()};
 window.deleteRequest=async(id)=>{if(!confirm('この希望を削除しますか？'))return;const {error}=await supabaseClient.from('shift_requests').delete().eq('id',id);if(error)return alert(error.message);await loadAll()};
+
+
+$('prevDay').onclick=()=>{dayCursor=addDays(dayCursor,-1);renderDay()};
+$('nextDay').onclick=()=>{dayCursor=addDays(dayCursor,1);renderDay()};
+$('todayDay').onclick=()=>{dayCursor=new Date();dayCursor.setHours(0,0,0,0);renderDay()};
 
 $('newRequestBtn').onclick=()=>{
   // 希望タブで表示中の週の月曜日を必ず初期日付にする（端末日付/UTCズレ防止）
