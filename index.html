@@ -198,7 +198,7 @@ thead th:first-child{z-index:10}
     <div style="display:flex;align-items:center;gap:8px">
       <div>
         <h1>SHIFT MANAGER</h1>
-        <div class="sub" id="storeTitle">共有シフト管理 V10 TEST DAY1</div>
+        <div class="sub" id="storeTitle">共有シフト管理 V11 SIMPLE AUTO</div>
       </div>
       <div class="topright">
         <span class="role-pill" id="rolePill"></span>
@@ -410,9 +410,17 @@ thead th:first-child{z-index:10}
 
 <!-- Auto schedule settings -->
 <div class="modal-bg" id="autoConfigModal"><div class="modal">
-<h2>NP 自動シフト設定 <span style="font-size:12px;color:#2563eb">V10</span></h2>
-<div class="auto-summary">基本：OPEN〜23時 <b>2人</b> / 23〜5時 <b>3人</b> / 5時〜LAST <b>平日2人・週末4人</b><br>作成前に日ごとに変更できます。固定OPENスタッフを先に配置し、残りを希望から自動で組みます。</div>
+<h2>NP 自動シフト設定 <span style="font-size:12px;color:#2563eb">V11</span></h2>
+<div class="auto-summary">基本：OPEN〜23時 <b>2人</b> / 23〜5時 <b>3人</b> / 5時〜LAST <b>平日2人・週末4人</b><br><b>金・土を先に作成</b>し、希望で出した勤務時間は勝手に変更しません。足りない場合は不足表示にします。</div>
 <div id="autoDays"></div>
+<div class="auto-day" style="margin-top:10px">
+  <div class="auto-day-head"><b>休み曜日を自動で決めるスタッフ</b><small>例：週1休み・曜日はどこでもOK</small></div>
+  <div class="auto-grid">
+    <div class="auto-field auto-wide"><label>スタッフ</label><select id="autoFlexStaff"><option value="">指定なし</option></select></div>
+    <div class="auto-field"><label>この週の休み日数</label><input id="autoFlexOffDays" type="number" min="0" max="6" value="1"></div>
+  </div>
+  <div class="simple-help">選んだスタッフは、その週の通常の希望時間を基準に、休み曜日だけ自動で調整します。金・土を優先して出勤させます。</div>
+</div>
 <div class="actions"><button class="btn secondary" data-close="autoConfigModal">キャンセル</button><button class="btn blue" id="runAutoScheduleBtn">この条件で自動作成</button></div>
 </div></div>
 
@@ -823,7 +831,10 @@ function toTimelineHour(value,openHour=18,lastHour=33){const raw=String(value||'
 function displayHour(h,lastHour){if(h===lastHour)return 'L';if(h===24)return '24';return h>24?String(h-24):String(h)}
 function requestAvailability(r,cfg){if(r.request_type==='off')return null;let s=toTimelineHour(r.start_text,cfg.open,cfg.last),e=toTimelineHour(r.end_text||'LAST',cfg.open,cfg.last);if(s==null)return null;if(e==null)e=cfg.last;if(e<=s)e+=24;e=Math.min(e,cfg.last);s=Math.max(s,cfg.open);return e>s?{start:s,end:e}:null}
 function requiredAt(h,cfg){if(h<23)return cfg.minOpen;if(h<29)return cfg.minNight;return cfg.minAfter}
-function candidateTemplates(av,cfg){const starts=[cfg.open,19,23,24,29],ends=[23,29,30,cfg.last],out=[];const add=(s,e)=>{if(s<av.start||e>av.end||e<=s)return;if(!out.some(x=>x.start===s&&x.end===e))out.push({start:s,end:e})};add(av.start,av.end);for(const s of starts)for(const e of ends)add(s,e);[[cfg.open,23],[cfg.open,29],[cfg.open,cfg.last],[23,29],[23,cfg.last],[24,cfg.last],[29,cfg.last]].forEach(x=>add(x[0],x[1]));return out}
+function candidateTemplates(av,cfg){
+  // V11: 希望時間をそのまま使う。自動生成が 24〜L → 5〜L 等へ勝手に変更しない。
+  return av&&av.end>av.start?[{start:av.start,end:av.end}]:[];
+}
 function coverageForAssignments(as,cfg){const cov={};for(let h=cfg.open;h<cfg.last;h++)cov[h]=0;for(const a of as)for(let h=Math.max(cfg.open,a.start);h<Math.min(cfg.last,a.end);h++)cov[h]=(cov[h]||0)+1;return cov}
 function deficits(cov,cfg){const a=[];for(let h=cfg.open;h<cfg.last;h++){const d=requiredAt(h,cfg)-(cov[h]||0);if(d>0)a.push({h,d})}return a}
 function chooseBestCandidate(people,as,cfg){const cov=coverageForAssignments(as,cfg);let best=null;for(const p of people){if(as.some(a=>a.staff.id===p.staff.id))continue;for(const c of p.candidates){let benefit=0,extra=0;for(let h=c.start;h<c.end;h++){if(h<cfg.open||h>=cfg.last)continue;const need=Math.max(0,requiredAt(h,cfg)-(cov[h]||0));if(need>0)benefit+=need;else extra++}if(!benefit)continue;const score=benefit*100-extra*3-(c.end-c.start);if(!best||score>best.score)best={...c,staff:p.staff,request:p.request,fixed:false,score}}}return best}
@@ -831,10 +842,110 @@ function optimizeAssignments(as,people,cfg){for(const a of as.filter(x=>!x.fixed
 function formatAssignment(a,cfg){return `${displayHour(a.start,cfg.last)}〜${displayHour(a.end,cfg.last)} NP`}
 function defaultDayConfig(date){const d=parseDate(date),weekend=d.getDay()===5||d.getDay()===6;return {date,open:18,last:weekend?35:33,minOpen:2,minNight:3,minAfter:weekend?4:2,fixed1:'',fixed2:''}}
 function eventForDate(date){return events.find(e=>e.date===date&&!String(e.name||'').startsWith('__'))}
-function renderAutoConfig(){const days=Array.from({length:7},(_,i)=>fmt(addDays(requestWeekStart,i)));$('autoDays').innerHTML=days.map(date=>{const cfg=defaultDayConfig(date),d=parseDate(date),ev=eventForDate(date),opts='<option value="">指定なし</option>'+staff.filter(s=>s.active!==false).map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');return `<div class="auto-day" data-auto-date="${date}"><div class="auto-day-head"><b>${d.getMonth()+1}/${d.getDate()}（${'日月火水木金土'[d.getDay()]}）</b><small>${ev?esc(ev.name):''}</small></div><div class="auto-grid"><div class="auto-field"><label>OPEN</label><input class="auto-open" type="number" value="${cfg.open}" min="12" max="24"></div><div class="auto-field"><label>LAST</label><select class="auto-last"><option value="33" ${cfg.last===33?'selected':''}>9:00</option><option value="34">10:00</option><option value="35" ${cfg.last===35?'selected':''}>11:00</option><option value="36">12:00</option></select></div><div class="auto-field"><label>OPEN〜23 最低</label><div class="auto-num"><button type="button" data-step="-1">−</button><input class="auto-min-open" type="number" value="${cfg.minOpen}" min="0"><button type="button" data-step="1">＋</button></div></div><div class="auto-field"><label>23〜5 最低</label><div class="auto-num"><button type="button" data-step="-1">−</button><input class="auto-min-night" type="number" value="${cfg.minNight}" min="0"><button type="button" data-step="1">＋</button></div></div><div class="auto-field auto-wide"><label>5〜LAST 最低</label><div class="auto-num"><button type="button" data-step="-1">−</button><input class="auto-min-after" type="number" value="${cfg.minAfter}" min="0"><button type="button" data-step="1">＋</button></div></div><div class="auto-field"><label>必ずOPEN ①</label><select class="auto-fixed1">${opts}</select></div><div class="auto-field"><label>必ずOPEN ②</label><select class="auto-fixed2">${opts}</select></div></div></div>`}).join('');document.querySelectorAll('#autoDays [data-step]').forEach(btn=>btn.onclick=()=>{const input=btn.parentElement.querySelector('input');input.value=Math.max(0,Number(input.value||0)+Number(btn.dataset.step))})}
+function renderAutoConfig(){
+  const days=Array.from({length:7},(_,i)=>fmt(addDays(requestWeekStart,i)));
+  const staffOpts='<option value="">指定なし</option>'+staff.filter(s=>s.active!==false).map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+  $('autoDays').innerHTML=days.map(date=>{const cfg=defaultDayConfig(date),d=parseDate(date),ev=eventForDate(date),opts=staffOpts;return `<div class="auto-day" data-auto-date="${date}"><div class="auto-day-head"><b>${d.getMonth()+1}/${d.getDate()}（${'日月火水木金土'[d.getDay()]}）</b><small>${ev?esc(ev.name):''}</small></div><div class="auto-grid"><div class="auto-field"><label>OPEN</label><input class="auto-open" type="number" value="${cfg.open}" min="12" max="24"></div><div class="auto-field"><label>LAST</label><select class="auto-last"><option value="33" ${cfg.last===33?'selected':''}>9:00</option><option value="34">10:00</option><option value="35" ${cfg.last===35?'selected':''}>11:00</option><option value="36">12:00</option></select></div><div class="auto-field"><label>OPEN〜23 最低</label><div class="auto-num"><button type="button" data-step="-1">−</button><input class="auto-min-open" type="number" value="${cfg.minOpen}" min="0"><button type="button" data-step="1">＋</button></div></div><div class="auto-field"><label>23〜5 最低</label><div class="auto-num"><button type="button" data-step="-1">−</button><input class="auto-min-night" type="number" value="${cfg.minNight}" min="0"><button type="button" data-step="1">＋</button></div></div><div class="auto-field auto-wide"><label>5〜LAST 最低</label><div class="auto-num"><button type="button" data-step="-1">−</button><input class="auto-min-after" type="number" value="${cfg.minAfter}" min="0"><button type="button" data-step="1">＋</button></div></div><div class="auto-field"><label>必ずOPEN ①</label><select class="auto-fixed1">${opts}</select></div><div class="auto-field"><label>必ずOPEN ②</label><select class="auto-fixed2">${opts}</select></div></div></div>`}).join('');
+  if($('autoFlexStaff')) $('autoFlexStaff').innerHTML=staffOpts;
+  document.querySelectorAll('#autoDays [data-step]').forEach(btn=>btn.onclick=()=>{const input=btn.parentElement.querySelector('input');input.value=Math.max(0,Number(input.value||0)+Number(btn.dataset.step))});
+}
 function readAutoConfigs(){return [...document.querySelectorAll('.auto-day')].map(el=>({date:el.dataset.autoDate,open:Number(el.querySelector('.auto-open').value||18),last:Number(el.querySelector('.auto-last').value||33),minOpen:Number(el.querySelector('.auto-min-open').value||0),minNight:Number(el.querySelector('.auto-min-night').value||0),minAfter:Number(el.querySelector('.auto-min-after').value||0),fixed1:el.querySelector('.auto-fixed1').value,fixed2:el.querySelector('.auto-fixed2').value}))}
 async function createAutoDraft(){if(!isAdmin())return;const approved=requests.filter(r=>isInRequestWeek(r)&&r.status==='approved'&&requestStaff(r));if(!approved.length)return alert('この週に承認済みの希望シフトがありません。');renderAutoConfig();show('autoConfigModal')}
-async function runAutoSchedule(){if(!isAdmin())return;const configs=readAutoConfigs(),allAssignments=[],warnings=[];for(const cfg of configs){const people=[];for(const r of requests.filter(r=>r.date===cfg.date&&r.status==='approved'&&requestStaff(r))){const s=requestStaff(r),av=requestAvailability(r,cfg);if(s&&av)people.push({staff:s,request:r,av,candidates:candidateTemplates(av,cfg)})}const as=[];for(const id of [cfg.fixed1,cfg.fixed2].filter(Boolean)){if(as.some(a=>String(a.staff.id)===String(id)))continue;const p=people.find(x=>String(x.staff.id)===String(id));if(!p){warnings.push(`${cfg.date}: 固定OPENスタッフが希望未提出`);continue}const c=p.candidates.filter(x=>x.start===cfg.open).sort((a,b)=>(b.end-b.start)-(a.end-a.start))[0];if(!c){warnings.push(`${cfg.date}: ${p.staff.name} はOPENから勤務不可`);continue}as.push({...c,staff:p.staff,request:p.request,fixed:true})}let guard=0;while(deficits(coverageForAssignments(as,cfg),cfg).length&&guard++<50){const best=chooseBestCandidate(people,as,cfg);if(!best)break;as.push(best)}optimizeAssignments(as,people,cfg);const rem=deficits(coverageForAssignments(as,cfg),cfg);if(rem.length){let groups=[],cur=null;for(const x of rem){if(!cur||x.h!==cur.end||x.d!==cur.d){cur={start:x.h,end:x.h+1,d:x.d};groups.push(cur)}else cur.end=x.h+1}groups.forEach(g=>warnings.push(`${cfg.date}: ${displayHour(g.start,cfg.last)}〜${displayHour(g.end,cfg.last)} ${g.d}人不足`))}as.forEach(a=>allAssignments.push({cfg,...a}))}if(!allAssignments.length)return alert('条件に合うシフトを作成できませんでした。');if(!confirm(`${allAssignments.length}件のNPシフト案を作成します。${warnings.length?`\n不足・確認事項 ${warnings.length}件あり`:''}`))return;for(const a of allAssignments){const row={staff_id:a.staff.id,date:a.cfg.date,display_text:formatAssignment(a,a.cfg),role:a.fixed?'OPEN':''};const del=await supabaseClient.from('shifts').delete().eq('staff_id',a.staff.id).eq('date',a.cfg.date);if(del.error)return alert('既存シフトの更新準備に失敗しました: '+del.error.message);const ins=await supabaseClient.from('shifts').insert(row);if(ins.error)return alert('シフト保存に失敗しました: '+ins.error.message)}hide('autoConfigModal');weekStart=new Date(requestWeekStart);dayCursor=new Date(requestWeekStart);await loadAll();document.querySelector('[data-tab="day"]').click();alert(warnings.length?'シフト案を作成しました。\n\n'+warnings.slice(0,20).join('\n'):'必要人数を満たすシフト案を作成しました。')}
+async function runAutoSchedule(){
+  if(!isAdmin())return;
+  const configs=readAutoConfigs();
+  const allAssignments=[],warnings=[];
+  const flexStaffId=$('autoFlexStaff')?.value||'';
+  const flexOffDays=Math.max(0,Math.min(6,Number($('autoFlexOffDays')?.value||1)));
+  const flexMaxDays=7-flexOffDays;
+  const flexAssignedDates=new Set();
+
+  // 休み自由スタッフの「通常勤務時間」は、その週で最も多い出勤希望時間を使う。
+  let flexBase=null;
+  if(flexStaffId){
+    const counts=new Map();
+    for(const r of requests.filter(r=>isInRequestWeek(r)&&r.status==='approved'&&String(requestStaff(r)?.id)===String(flexStaffId)&&r.request_type!=='off')){
+      const cfg=configs.find(c=>c.date===r.date)||defaultDayConfig(r.date);
+      const av=requestAvailability(r,cfg); if(!av)continue;
+      const key=`${av.start}-${av.end}`;
+      const x=counts.get(key)||{count:0,av};x.count++;counts.set(key,x);
+    }
+    flexBase=[...counts.values()].sort((a,b)=>b.count-a.count)[0]?.av||null;
+    if(!flexBase)warnings.push('休み自動調整スタッフの通常勤務時間を判定できませんでした。');
+  }
+
+  // 金→土を最優先。その後は希望を出している人数が少ない日から処理。
+  const candidateCount=(cfg)=>requests.filter(r=>r.date===cfg.date&&r.status==='approved'&&requestStaff(r)&&r.request_type!=='off').length;
+  const priority=(cfg)=>{const d=parseDate(cfg.date).getDay();if(d===5)return 0;if(d===6)return 1;return 10+candidateCount(cfg)};
+  const ordered=configs.slice().sort((a,b)=>priority(a)-priority(b)||a.date.localeCompare(b.date));
+
+  for(const cfg of ordered){
+    const people=[];
+    const dayReqs=requests.filter(r=>r.date===cfg.date&&r.status==='approved'&&requestStaff(r));
+    for(const r of dayReqs){
+      const st=requestStaff(r); let av=requestAvailability(r,cfg);
+      if(String(st?.id)===String(flexStaffId)&&flexBase){
+        // この人だけは「休み」提出日でも、週内の休み曜日を移動できる。
+        av={start:Math.max(cfg.open,flexBase.start),end:Math.min(cfg.last,flexBase.end)};
+        if(av.end<=av.start)av=null;
+      }
+      if(st&&av)people.push({staff:st,request:r,av,candidates:candidateTemplates(av,cfg),flex:String(st.id)===String(flexStaffId)});
+    }
+    // 休み自由スタッフがその日に希望自体を出していなくても候補にできる。
+    if(flexStaffId&&flexBase&&!people.some(p=>String(p.staff.id)===String(flexStaffId))){
+      const st=staff.find(x=>String(x.id)===String(flexStaffId));
+      if(st){const av={start:Math.max(cfg.open,flexBase.start),end:Math.min(cfg.last,flexBase.end)};if(av.end>av.start)people.push({staff:st,request:null,av,candidates:candidateTemplates(av,cfg),flex:true});}
+    }
+    const as=[];
+    const flexCanWork=()=>!flexStaffId||flexAssignedDates.has(cfg.date)||flexAssignedDates.size<flexMaxDays;
+
+    for(const id of [cfg.fixed1,cfg.fixed2].filter(Boolean)){
+      if(as.some(a=>String(a.staff.id)===String(id)))continue;
+      const p=people.find(x=>String(x.staff.id)===String(id));
+      if(!p){warnings.push(`${cfg.date}: 固定OPENスタッフが勤務可能ではありません`);continue;}
+      if(p.flex&&!flexCanWork()){warnings.push(`${cfg.date}: ${p.staff.name} は週${flexOffDays}日休み条件のため固定OPENにできません`);continue;}
+      const c=p.candidates.find(x=>x.start===cfg.open);
+      if(!c){warnings.push(`${cfg.date}: ${p.staff.name} はOPENから勤務不可`);continue;}
+      as.push({...c,staff:p.staff,request:p.request,fixed:true,flex:p.flex});
+      if(p.flex)flexAssignedDates.add(cfg.date);
+    }
+
+    let guard=0;
+    while(deficits(coverageForAssignments(as,cfg),cfg).length&&guard++<50){
+      const eligible=people.filter(p=>!p.flex||flexCanWork());
+      const best=chooseBestCandidate(eligible,as,cfg);
+      if(!best)break;
+      const src=people.find(p=>String(p.staff.id)===String(best.staff.id));
+      best.flex=!!src?.flex;
+      as.push(best);
+      if(best.flex)flexAssignedDates.add(cfg.date);
+    }
+
+    const rem=deficits(coverageForAssignments(as,cfg),cfg);
+    if(rem.length){let groups=[],cur=null;for(const x of rem){if(!cur||x.h!==cur.end||x.d!==cur.d){cur={start:x.h,end:x.h+1,d:x.d};groups.push(cur)}else cur.end=x.h+1}groups.forEach(g=>warnings.push(`${cfg.date}: ${displayHour(g.start,cfg.last)}〜${displayHour(g.end,cfg.last)} ${g.d}人不足`));}
+    as.forEach(a=>allAssignments.push({cfg,...a}));
+  }
+
+  if(!allAssignments.length)return alert('条件に合うシフトを作成できませんでした。');
+  if(flexStaffId){
+    const st=staff.find(x=>String(x.id)===String(flexStaffId));
+    const offDates=configs.map(c=>c.date).filter(d=>!flexAssignedDates.has(d));
+    warnings.unshift(`${st?.name||'休み自動調整スタッフ'}：休み ${offDates.length?offDates.map(d=>`${parseDate(d).getMonth()+1}/${parseDate(d).getDate()}`).join('・'):'なし'}`);
+  }
+  if(!confirm(`${allAssignments.length}件のNPシフト案を作成します。${warnings.length?`\n不足・確認事項 ${warnings.length}件あり`:''}`))return;
+
+  // 前回のNP自動生成結果が残らないよう、この週のNPシフトだけ一度消してから保存。
+  const weekEnd=fmt(addDays(requestWeekStart,6));
+  const clear=await supabaseClient.from('shifts').delete().gte('date',fmt(requestWeekStart)).lte('date',weekEnd).like('display_text','% NP');
+  if(clear.error)return alert('前回シフトの整理に失敗しました: '+clear.error.message);
+  for(const a of allAssignments){
+    const row={staff_id:a.staff.id,date:a.cfg.date,display_text:formatAssignment(a,a.cfg),role:a.fixed?'OPEN':''};
+    const ins=await supabaseClient.from('shifts').insert(row);
+    if(ins.error)return alert('シフト保存に失敗しました: '+ins.error.message);
+  }
+  hide('autoConfigModal');weekStart=new Date(requestWeekStart);dayCursor=new Date(requestWeekStart);await loadAll();document.querySelector('[data-tab="day"]').click();
+  alert(warnings.length?'シフト案を作成しました。\n\n'+warnings.slice(0,20).join('\n'):'必要人数を満たすシフト案を作成しました。');
+}
 async function approveAndCreateDraft(){if(!isAdmin())return;const pending=requests.filter(r=>isInRequestWeek(r)&&r.status==='pending');if(pending.length){if(!confirm(`この週の未処理 ${pending.length}件をすべて承認して、自動シフト設定へ進みますか？`))return;const {error}=await supabaseClient.from('shift_requests').update({status:'approved'}).in('id',pending.map(r=>r.id));if(error)return alert(error.message);await loadAll()}await createAutoDraft()}
 
 function consecutiveLabel(rows){
@@ -1002,7 +1113,7 @@ async function seedTenPersonTest(){
   weekStart=parseDate(start);
   await loadAll();
   renderRequests();
-  alert('TEST-1〜TEST-10の希望を9/14〜9/20に入力しました。\n\n次は「自動シフト設定」を押して、必要人数と「必ずOPEN（TEST-9）」だけ設定してテストできます。');
+  alert('TEST-1〜TEST-10の希望を9/14〜9/20に入力しました。\n\n自動シフト設定で「休み曜日を自動で決めるスタッフ」にTEST-9、休み日数1を選んでテストしてください。');
 }
 $('seedTestBtn').onclick=seedTenPersonTest;
 
