@@ -198,7 +198,7 @@ thead th:first-child{z-index:10}
     <div style="display:flex;align-items:center;gap:8px">
       <div>
         <h1>SHIFT MANAGER</h1>
-        <div class="sub" id="storeTitle">共有シフト管理 V12 MEMORY</div>
+        <div class="sub" id="storeTitle">共有シフト管理 V12.1 MEMORY ADMIN FIX</div>
       </div>
       <div class="topright">
         <span class="role-pill" id="rolePill"></span>
@@ -465,7 +465,7 @@ function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x}
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 function normEmail(v){return String(v||'').trim().toLowerCase()}
 function isManagerEmail(email){return managerEmails.includes(normEmail(email))}
-function isAdmin(){return profile?.role==='admin'||isManagerEmail(currentUser?.email)}
+function isAdmin(){const r=String(profile?.role||'').toLowerCase();return r==='admin'||r==='manager'||isManagerEmail(currentUser?.email)}
 function managerMetaEvent(){return events.find(e=>e.name==='__SHIFT_MANAGER_MANAGERS__')}
 function readManagerEmails(){
   const meta=managerMetaEvent();
