@@ -198,7 +198,7 @@ thead th:first-child{z-index:10}
     <div style="display:flex;align-items:center;gap:8px">
       <div>
         <h1>SHIFT MANAGER</h1>
-        <div class="sub" id="storeTitle">共有シフト管理 V11 SIMPLE AUTO</div>
+        <div class="sub" id="storeTitle">共有シフト管理 V12 MEMORY</div>
       </div>
       <div class="topright">
         <span class="role-pill" id="rolePill"></span>
@@ -287,6 +287,7 @@ thead th:first-child{z-index:10}
         </div>
         <button class="btn blue workflow-btn admin-only" id="approveAndDraftBtn">未処理を全部承認 → 自動シフト作成</button>
         <button class="btn secondary workflow-btn admin-only" id="seedTestBtn" style="margin-top:8px">🧪 9/14〜9/20 テスト10人を自動入力</button>
+        <button class="btn secondary workflow-btn admin-only" id="testNamesBtn" style="margin-top:8px">✏️ テスト10人の名前を変更</button>
       </div>
       <div class="draft-box admin-only">
         <b>管理者の流れ：希望確認 → 承認 → 必要人数設定 → 自動作成</b>
@@ -410,8 +411,9 @@ thead th:first-child{z-index:10}
 
 <!-- Auto schedule settings -->
 <div class="modal-bg" id="autoConfigModal"><div class="modal">
-<h2>NP 自動シフト設定 <span style="font-size:12px;color:#2563eb">V11</span></h2>
+<h2>NP 自動シフト設定 <span style="font-size:12px;color:#2563eb">V12</span></h2>
 <div class="auto-summary">基本：OPEN〜23時 <b>2人</b> / 23〜5時 <b>3人</b> / 5時〜LAST <b>平日2人・週末4人</b><br><b>金・土を先に作成</b>し、希望で出した勤務時間は勝手に変更しません。足りない場合は不足表示にします。</div>
+<div class="simple-help" style="margin-bottom:10px"><b>一度設定した内容は自動で記憶</b>します。次の週も同じ曜日設定をそのまま使えます。</div>
 <div id="autoDays"></div>
 <div class="auto-day" style="margin-top:10px">
   <div class="auto-day-head"><b>休み曜日を自動で決めるスタッフ</b><small>例：週1休み・曜日はどこでもOK</small></div>
@@ -422,6 +424,14 @@ thead th:first-child{z-index:10}
   <div class="simple-help">選んだスタッフは、その週の通常の希望時間を基準に、休み曜日だけ自動で調整します。金・土を優先して出勤させます。</div>
 </div>
 <div class="actions"><button class="btn secondary" data-close="autoConfigModal">キャンセル</button><button class="btn blue" id="runAutoScheduleBtn">この条件で自動作成</button></div>
+</div></div>
+
+<!-- Test staff names -->
+<div class="modal-bg" id="testNamesModal"><div class="modal">
+<h2>テスト10人の名前</h2>
+<div class="simple-help">ここで一度保存すると、次回のテスト入力でも同じ名前を使います。</div>
+<div id="testNameFields" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px"></div>
+<div class="actions"><button class="btn secondary" data-close="testNamesModal">キャンセル</button><button class="btn blue" id="saveTestNamesBtn">名前を保存</button></div>
 </div></div>
 
 <!-- Event -->
@@ -840,13 +850,41 @@ function deficits(cov,cfg){const a=[];for(let h=cfg.open;h<cfg.last;h++){const d
 function chooseBestCandidate(people,as,cfg){const cov=coverageForAssignments(as,cfg);let best=null;for(const p of people){if(as.some(a=>a.staff.id===p.staff.id))continue;for(const c of p.candidates){let benefit=0,extra=0;for(let h=c.start;h<c.end;h++){if(h<cfg.open||h>=cfg.last)continue;const need=Math.max(0,requiredAt(h,cfg)-(cov[h]||0));if(need>0)benefit+=need;else extra++}if(!benefit)continue;const score=benefit*100-extra*3-(c.end-c.start);if(!best||score>best.score)best={...c,staff:p.staff,request:p.request,fixed:false,score}}}return best}
 function optimizeAssignments(as,people,cfg){for(const a of as.filter(x=>!x.fixed)){const p=people.find(x=>x.staff.id===a.staff.id);if(!p)continue;for(const c of p.candidates.slice().sort((x,y)=>(x.end-x.start)-(y.end-y.start))){const test=as.map(x=>x===a?{...a,start:c.start,end:c.end}:x);if(deficits(coverageForAssignments(test,cfg),cfg).length===0){a.start=c.start;a.end=c.end;break}}}}
 function formatAssignment(a,cfg){return `${displayHour(a.start,cfg.last)}〜${displayHour(a.end,cfg.last)} NP`}
+const AUTO_MEMORY_KEY='shiftManagerAutoConfigV12';
+const TEST_NAMES_KEY='shiftManagerTestNamesV12';
+function loadAutoMemory(){try{return JSON.parse(localStorage.getItem(AUTO_MEMORY_KEY)||'{}')||{}}catch(e){return {}}}
+function saveAutoMemory(configs){
+  const mem=loadAutoMemory();
+  configs.forEach(cfg=>{const dow=parseDate(cfg.date).getDay();mem['dow'+dow]={open:cfg.open,last:cfg.last,minOpen:cfg.minOpen,minNight:cfg.minNight,minAfter:cfg.minAfter,fixed1:cfg.fixed1||'',fixed2:cfg.fixed2||''};});
+  mem.flexStaff=$('autoFlexStaff')?.value||'';mem.flexOffDays=Math.max(0,Math.min(6,Number($('autoFlexOffDays')?.value||1)));
+  localStorage.setItem(AUTO_MEMORY_KEY,JSON.stringify(mem));
+}
+function rememberedDayConfig(date){
+  const base=defaultDayConfig(date),mem=loadAutoMemory(),saved=mem['dow'+parseDate(date).getDay()];
+  return saved?{...base,...saved,date}:base;
+}
+function getTestNames(){
+  try{const a=JSON.parse(localStorage.getItem(TEST_NAMES_KEY)||'[]');if(Array.isArray(a)&&a.length===10)return a.map((x,i)=>String(x||`TEST-${i+1}`).trim()||`TEST-${i+1}`)}catch(e){}
+  return Array.from({length:10},(_,i)=>`TEST-${i+1}`);
+}
 function defaultDayConfig(date){const d=parseDate(date),weekend=d.getDay()===5||d.getDay()===6;return {date,open:18,last:weekend?35:33,minOpen:2,minNight:3,minAfter:weekend?4:2,fixed1:'',fixed2:''}}
 function eventForDate(date){return events.find(e=>e.date===date&&!String(e.name||'').startsWith('__'))}
 function renderAutoConfig(){
   const days=Array.from({length:7},(_,i)=>fmt(addDays(requestWeekStart,i)));
   const staffOpts='<option value="">指定なし</option>'+staff.filter(s=>s.active!==false).map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
-  $('autoDays').innerHTML=days.map(date=>{const cfg=defaultDayConfig(date),d=parseDate(date),ev=eventForDate(date),opts=staffOpts;return `<div class="auto-day" data-auto-date="${date}"><div class="auto-day-head"><b>${d.getMonth()+1}/${d.getDate()}（${'日月火水木金土'[d.getDay()]}）</b><small>${ev?esc(ev.name):''}</small></div><div class="auto-grid"><div class="auto-field"><label>OPEN</label><input class="auto-open" type="number" value="${cfg.open}" min="12" max="24"></div><div class="auto-field"><label>LAST</label><select class="auto-last"><option value="33" ${cfg.last===33?'selected':''}>9:00</option><option value="34">10:00</option><option value="35" ${cfg.last===35?'selected':''}>11:00</option><option value="36">12:00</option></select></div><div class="auto-field"><label>OPEN〜23 最低</label><div class="auto-num"><button type="button" data-step="-1">−</button><input class="auto-min-open" type="number" value="${cfg.minOpen}" min="0"><button type="button" data-step="1">＋</button></div></div><div class="auto-field"><label>23〜5 最低</label><div class="auto-num"><button type="button" data-step="-1">−</button><input class="auto-min-night" type="number" value="${cfg.minNight}" min="0"><button type="button" data-step="1">＋</button></div></div><div class="auto-field auto-wide"><label>5〜LAST 最低</label><div class="auto-num"><button type="button" data-step="-1">−</button><input class="auto-min-after" type="number" value="${cfg.minAfter}" min="0"><button type="button" data-step="1">＋</button></div></div><div class="auto-field"><label>必ずOPEN ①</label><select class="auto-fixed1">${opts}</select></div><div class="auto-field"><label>必ずOPEN ②</label><select class="auto-fixed2">${opts}</select></div></div></div>`}).join('');
-  if($('autoFlexStaff')) $('autoFlexStaff').innerHTML=staffOpts;
+  $('autoDays').innerHTML=days.map(date=>{const cfg=rememberedDayConfig(date),d=parseDate(date),ev=eventForDate(date),opts=staffOpts;return `<div class="auto-day" data-auto-date="${date}"><div class="auto-day-head"><b>${d.getMonth()+1}/${d.getDate()}（${'日月火水木金土'[d.getDay()]}）</b><small>${ev?esc(ev.name):''}</small></div><div class="auto-grid"><div class="auto-field"><label>OPEN</label><input class="auto-open" type="number" value="${cfg.open}" min="12" max="24"></div><div class="auto-field"><label>LAST</label><select class="auto-last"><option value="33" ${cfg.last===33?'selected':''}>9:00</option><option value="34">10:00</option><option value="35" ${cfg.last===35?'selected':''}>11:00</option><option value="36">12:00</option></select></div><div class="auto-field"><label>OPEN〜23 最低</label><div class="auto-num"><button type="button" data-step="-1">−</button><input class="auto-min-open" type="number" value="${cfg.minOpen}" min="0"><button type="button" data-step="1">＋</button></div></div><div class="auto-field"><label>23〜5 最低</label><div class="auto-num"><button type="button" data-step="-1">−</button><input class="auto-min-night" type="number" value="${cfg.minNight}" min="0"><button type="button" data-step="1">＋</button></div></div><div class="auto-field auto-wide"><label>5〜LAST 最低</label><div class="auto-num"><button type="button" data-step="-1">−</button><input class="auto-min-after" type="number" value="${cfg.minAfter}" min="0"><button type="button" data-step="1">＋</button></div></div><div class="auto-field"><label>必ずOPEN ①</label><select class="auto-fixed1">${opts}</select></div><div class="auto-field"><label>必ずOPEN ②</label><select class="auto-fixed2">${opts}</select></div></div></div>`}).join('');
+  document.querySelectorAll('#autoDays .auto-day').forEach(el=>{
+    const cfg=rememberedDayConfig(el.dataset.autoDate);
+    const f1=el.querySelector('.auto-fixed1'),f2=el.querySelector('.auto-fixed2');
+    if(f1&&cfg.fixed1&&[...f1.options].some(o=>String(o.value)===String(cfg.fixed1)))f1.value=cfg.fixed1;
+    if(f2&&cfg.fixed2&&[...f2.options].some(o=>String(o.value)===String(cfg.fixed2)))f2.value=cfg.fixed2;
+  });
+  if($('autoFlexStaff')) {
+    $('autoFlexStaff').innerHTML=staffOpts;
+    const mem=loadAutoMemory();
+    if(mem.flexStaff && [...$('autoFlexStaff').options].some(o=>String(o.value)===String(mem.flexStaff))) $('autoFlexStaff').value=mem.flexStaff;
+    if(mem.flexOffDays!=null) $('autoFlexOffDays').value=mem.flexOffDays;
+  }
   document.querySelectorAll('#autoDays [data-step]').forEach(btn=>btn.onclick=()=>{const input=btn.parentElement.querySelector('input');input.value=Math.max(0,Number(input.value||0)+Number(btn.dataset.step))});
 }
 function readAutoConfigs(){return [...document.querySelectorAll('.auto-day')].map(el=>({date:el.dataset.autoDate,open:Number(el.querySelector('.auto-open').value||18),last:Number(el.querySelector('.auto-last').value||33),minOpen:Number(el.querySelector('.auto-min-open').value||0),minNight:Number(el.querySelector('.auto-min-night').value||0),minAfter:Number(el.querySelector('.auto-min-after').value||0),fixed1:el.querySelector('.auto-fixed1').value,fixed2:el.querySelector('.auto-fixed2').value}))}
@@ -854,6 +892,7 @@ async function createAutoDraft(){if(!isAdmin())return;const approved=requests.fi
 async function runAutoSchedule(){
   if(!isAdmin())return;
   const configs=readAutoConfigs();
+  saveAutoMemory(configs);
   const allAssignments=[],warnings=[];
   const flexStaffId=$('autoFlexStaff')?.value||'';
   const flexOffDays=Math.max(0,Math.min(6,Number($('autoFlexOffDays')?.value||1)));
@@ -1057,9 +1096,9 @@ $('todayReqWeek').onclick=()=>{requestWeekStart=getMonday(new Date());renderRequ
 async function seedTenPersonTest(){
   if(!isAdmin())return;
   const start='2026-09-14', end='2026-09-20';
-  if(!confirm('9/14〜9/20の希望データを一度消して、TEST-1〜TEST-10のテスト希望を自動入力します。\n\nスタッフ本体は消しません。進めますか？'))return;
+  if(!confirm('9/14〜9/20の希望データを一度消して、保存したテスト10人の希望を自動入力します。\n\nスタッフ本体は消しません。進めますか？'))return;
 
-  const names=Array.from({length:10},(_,i)=>`TEST-${i+1}`);
+  const names=getTestNames();
   const byName={};
   staff.forEach(s=>{ if(names.includes(s.name)&&!byName[s.name]) byName[s.name]=s; });
   let sort=staff.reduce((m,s)=>Math.max(m,Number(s.sort_order)||0),0);
@@ -1077,16 +1116,16 @@ async function seedTenPersonTest(){
   if(error)return alert('古い希望の整理に失敗しました: '+error.message);
 
   const plan={
-    'TEST-1':['23〜L','休み','23〜L','23〜L','24〜L','24〜L','24〜L'],
-    'TEST-2':['休み','休み','休み','休み','21〜5','休み','休み'],
-    'TEST-3':['18〜23','18〜5','休み','18〜5','18〜5','18〜5','18〜5'],
-    'TEST-4':['休み','休み','休み','休み','24〜L','休み','休み'],
-    'TEST-5':['休み','休み','休み','休み','休み','24〜8','休み'],
-    'TEST-6':['18〜5','18〜5','18〜5','18〜5','休み','休み','18〜5'],
-    'TEST-7':['休み','休み','24〜L','休み','24〜L','休み','休み'],
-    'TEST-8':['休み','24〜8','休み','休み','休み','24〜8','休み'],
-    'TEST-9':['18〜5','休み','18〜5','18〜5','18〜5','18〜5','18〜5'],
-    'TEST-10':['休み','24〜L','休み','24〜L','24〜L','24〜L','24〜L']
+    [names[0]]:['23〜L','休み','23〜L','23〜L','24〜L','24〜L','24〜L'],
+    [names[1]]:['休み','休み','休み','休み','21〜5','休み','休み'],
+    [names[2]]:['18〜23','18〜5','休み','18〜5','18〜5','18〜5','18〜5'],
+    [names[3]]:['休み','休み','休み','休み','24〜L','休み','休み'],
+    [names[4]]:['休み','休み','休み','休み','休み','24〜8','休み'],
+    [names[5]]:['18〜5','18〜5','18〜5','18〜5','休み','休み','18〜5'],
+    [names[6]]:['休み','休み','24〜L','休み','24〜L','休み','休み'],
+    [names[7]]:['休み','24〜8','休み','休み','休み','24〜8','休み'],
+    [names[8]]:['18〜5','休み','18〜5','18〜5','18〜5','18〜5','18〜5'],
+    [names[9]]:['休み','24〜L','休み','24〜L','24〜L','24〜L','24〜L']
   };
   const parse={
     '18〜23':['18:00','23:00'],'18〜5':['18:00','05:00'],'18〜6':['18:00','06:00'],
@@ -1113,8 +1152,26 @@ async function seedTenPersonTest(){
   weekStart=parseDate(start);
   await loadAll();
   renderRequests();
-  alert('TEST-1〜TEST-10の希望を9/14〜9/20に入力しました。\n\n自動シフト設定で「休み曜日を自動で決めるスタッフ」にTEST-9、休み日数1を選んでテストしてください。');
+  alert('テスト10人の希望を9/14〜9/20に入力しました。\n\n自動シフト設定は前回の内容を記憶しています。必要なら確認して、そのまま自動作成してください。');
 }
+function openTestNamesModal(){
+  const names=getTestNames();
+  $('testNameFields').innerHTML=names.map((name,i)=>`<div class="field"><label>${i+1}人目</label><input class="test-name-input" data-i="${i}" value="${esc(name)}" placeholder="スタッフ名"></div>`).join('');
+  show('testNamesModal');
+}
+$('testNamesBtn').onclick=openTestNamesModal;
+$('saveTestNamesBtn').onclick=async()=>{
+  const oldNames=getTestNames();
+  const vals=[...document.querySelectorAll('.test-name-input')].map((x,i)=>x.value.trim()||`TEST-${i+1}`);
+  if(new Set(vals.map(x=>x.toLowerCase())).size!==10)return alert('同じ名前は使えません。10人それぞれ別の名前にしてください。');
+  for(let i=0;i<10;i++){
+    if(oldNames[i]===vals[i])continue;
+    const st=staff.find(x=>x.name===oldNames[i])||staff.find(x=>x.name===`TEST-${i+1}`);
+    if(st){const {error}=await supabaseClient.from('staff').update({name:vals[i]}).eq('id',st.id);if(error)return alert('名前変更エラー: '+error.message);}
+  }
+  localStorage.setItem(TEST_NAMES_KEY,JSON.stringify(vals));
+  await loadAll();hide('testNamesModal');alert('テストスタッフ名を変更して保存しました。次回からこの名前を使います。');
+};
 $('seedTestBtn').onclick=seedTenPersonTest;
 
 function renderMonth(){
