@@ -198,7 +198,7 @@ thead th:first-child{z-index:10}
     <div style="display:flex;align-items:center;gap:8px">
       <div>
         <h1>SHIFT MANAGER</h1>
-        <div class="sub" id="storeTitle">共有シフト管理 V12.1 MEMORY ADMIN FIX</div>
+        <div class="sub" id="storeTitle">共有シフト管理 V12.2 STAFF EDIT</div>
       </div>
       <div class="topright">
         <span class="role-pill" id="rolePill"></span>
@@ -287,7 +287,6 @@ thead th:first-child{z-index:10}
         </div>
         <button class="btn blue workflow-btn admin-only" id="approveAndDraftBtn">未処理を全部承認 → 自動シフト作成</button>
         <button class="btn secondary workflow-btn admin-only" id="seedTestBtn" style="margin-top:8px">🧪 9/14〜9/20 テスト10人を自動入力</button>
-        <button class="btn secondary workflow-btn admin-only" id="testNamesBtn" style="margin-top:8px">✏️ テスト10人の名前を変更</button>
       </div>
       <div class="draft-box admin-only">
         <b>管理者の流れ：希望確認 → 承認 → 必要人数設定 → 自動作成</b>
@@ -670,6 +669,7 @@ function renderStaffManagement(){
         <small>${esc(s.email||'メール未登録')} / ${s.active===false?'非表示':'表示中'}</small>
       </div>
       <div class="staff-manage-actions">
+        <button class="btn secondary small" onclick="editStaffName('${s.id}')">名前変更</button>
         <button class="btn ${manager?'secondary':'green'} small" onclick="toggleManager('${s.id}')">${manager?'管理者解除':'管理者にする'}</button>
         <button class="btn secondary small" onclick="toggleStaffActive('${s.id}')">${s.active===false?'表示':'非表示'}</button>
         <button class="btn danger small" onclick="deleteStaff('${s.id}')">削除</button>
@@ -709,6 +709,30 @@ $('saveStaffBtn').onclick=async()=>{
   }
   hide('staffModal');
   await loadAll();
+};
+
+window.editStaffName=async(id)=>{
+  if(!isAdmin())return;
+  const st=staff.find(x=>String(x.id)===String(id));
+  if(!st)return;
+  const oldName=String(st.name||'').trim();
+  const next=prompt('新しいスタッフ名を入力してください',oldName);
+  if(next===null)return;
+  const name=next.trim();
+  if(!name)return alert('名前を入力してください。');
+  if(staff.some(x=>String(x.id)!==String(id)&&String(x.name||'').trim().toLowerCase()===name.toLowerCase()))return alert('同じ名前のスタッフがすでにいます。');
+  if(name===oldName)return;
+  const {error}=await supabaseClient.from('staff').update({name}).eq('id',id);
+  if(error)return alert('名前を変更できませんでした。\n'+error.message);
+
+  // テスト10人として保存されている名前なら、次回のテスト入力にも新しい名前を引き継ぐ。
+  const saved=getTestNames();
+  let changed=false;
+  const updated=saved.map(x=>{if(x===oldName){changed=true;return name}return x});
+  if(changed)localStorage.setItem(TEST_NAMES_KEY,JSON.stringify(updated));
+
+  await loadAll();
+  renderStaffManagement();
 };
 
 window.toggleManager=async(id)=>{
@@ -1159,8 +1183,8 @@ function openTestNamesModal(){
   $('testNameFields').innerHTML=names.map((name,i)=>`<div class="field"><label>${i+1}人目</label><input class="test-name-input" data-i="${i}" value="${esc(name)}" placeholder="スタッフ名"></div>`).join('');
   show('testNamesModal');
 }
-$('testNamesBtn').onclick=openTestNamesModal;
-$('saveTestNamesBtn').onclick=async()=>{
+if($('testNamesBtn'))$('testNamesBtn').onclick=openTestNamesModal;
+if($('saveTestNamesBtn'))$('saveTestNamesBtn').onclick=async()=>{
   const oldNames=getTestNames();
   const vals=[...document.querySelectorAll('.test-name-input')].map((x,i)=>x.value.trim()||`TEST-${i+1}`);
   if(new Set(vals.map(x=>x.toLowerCase())).size!==10)return alert('同じ名前は使えません。10人それぞれ別の名前にしてください。');
