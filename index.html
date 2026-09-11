@@ -1,0 +1,1270 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>SHIFT MANAGER</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#f5f7fb;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;
+  --sat:#eaf4ff;--sun:#fff0f2;--accent:#111827;--blue:#2563eb;--yellow:#fff4b8;
+  --green:#047857;--red:#b91c1c;--orange:#b45309;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+body{min-height:100vh}
+button,input,select,textarea{font:inherit}
+button{cursor:pointer}
+header{position:sticky;top:0;z-index:30;background:rgba(245,247,251,.95);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.head{padding:12px 14px}
+h1{font-size:20px;margin:0}
+.sub{font-size:12px;color:var(--muted);margin-top:3px}
+.toolbar,.navrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.btn{border:0;border-radius:12px;padding:10px 14px;background:#111827;color:#fff;font-weight:800}
+.btn.secondary{background:#fff;color:#111827;border:1px solid var(--line)}
+.btn.blue{background:var(--blue)}
+.btn.green{background:var(--green)}
+.btn.danger{background:#fff;color:var(--red);border:1px solid #fecaca}
+.btn.small{padding:8px 10px;border-radius:10px;font-size:13px}
+.tabs{display:flex;border-top:1px solid var(--line);background:#fff;overflow:auto}
+.tab{flex:1;min-width:90px;padding:12px 10px;border:0;background:#fff;color:var(--muted);font-weight:800;border-bottom:3px solid transparent}
+.tab.active{color:var(--text);border-bottom-color:var(--text)}
+main{padding:12px;max-width:1200px;margin:auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;margin-bottom:12px}
+.section-title{font-size:16px;font-weight:900;padding:14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.section-title small{font-size:12px;color:var(--muted);font-weight:600}
+.notice{padding:12px 14px;font-size:13px;border-bottom:1px solid var(--line)}
+.ok{color:var(--green)}.warn{color:var(--orange)}.danger-text{color:var(--red)}
+.table-wrap{overflow:auto;-webkit-overflow-scrolling:touch}
+table{border-collapse:separate;border-spacing:0;min-width:980px;width:100%}
+th,td{border-right:1px solid var(--line);border-bottom:1px solid var(--line);text-align:center;min-width:105px;height:58px;padding:6px}
+th:first-child,td:first-child{position:sticky;left:0;z-index:5;background:#fff;min-width:130px}
+thead th{position:sticky;top:0;z-index:8;background:#fff;font-size:13px}
+thead th:first-child{z-index:10}
+.sat{background:var(--sat)!important}.sun{background:var(--sun)!important}
+.staff-cell{text-align:left;padding-left:12px;font-weight:900}
+.shift-btn{width:100%;height:100%;border:0;background:transparent;border-radius:10px;font-weight:900;color:var(--blue);line-height:1.25}
+.shift-btn:active{background:#f3f4f6}.empty{color:#c7cbd1}
+.coverage-wrap{display:flex;gap:8px;overflow:auto;padding:10px 12px;border-bottom:1px solid var(--line);background:#f9fafb;-webkit-overflow-scrolling:touch}
+.coverage-day{flex:0 0 158px;border:1px solid var(--line);border-radius:12px;background:#fff;padding:9px}
+.coverage-day.sat{background:var(--sat)!important}.coverage-day.sun{background:var(--sun)!important}
+.coverage-date{font-weight:900;margin-bottom:6px}.coverage-line{display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:3px 0}
+.coverage-ok{color:var(--green);font-weight:900}.coverage-short{color:var(--red);font-weight:900}
+.open-badge{display:block;width:max-content;margin:3px auto 0;padding:2px 6px;border-radius:999px;background:#dcfce7;color:#047857;font-size:10px;font-weight:900}
+@media(max-width:600px){table{min-width:820px}th,td{min-width:94px;height:54px;padding:4px}th:first-child,td:first-child{min-width:105px}.staff-cell{padding-left:8px}.shift-btn{font-size:13px}}
+
+.day-summary{padding:14px;background:#fff;border-bottom:1px solid var(--line)}
+.day-date-big{font-size:24px;font-weight:950;text-align:center;margin-bottom:12px}
+.day-nav{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:12px}
+.day-nav .btn{min-width:74px}
+.day-coverage{display:grid;grid-template-columns:1fr;gap:8px}
+.day-cover-row{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:#f8fafc}
+.day-cover-label{font-weight:900;font-size:15px}.day-cover-num{font-size:18px;font-weight:950;white-space:nowrap}
+.day-cover-row.okay .day-cover-num{color:var(--green)}
+.day-cover-row.short{background:#fff1f2;border-color:#fecdd3}.day-cover-row.short .day-cover-num{color:var(--red)}
+.day-staff-list{padding:8px 12px 14px}
+.day-shift-card{display:grid;grid-template-columns:minmax(90px,1fr) auto;align-items:center;gap:10px;padding:13px 4px;border-bottom:1px solid var(--line)}
+.day-shift-card:last-child{border-bottom:0}.day-staff-name{font-size:16px;font-weight:950}.day-shift-time{font-size:18px;font-weight:950;color:var(--blue);text-align:right}
+.day-open-badge{display:inline-block;margin-left:6px;padding:3px 7px;border-radius:999px;background:#dcfce7;color:#047857;font-size:10px;font-weight:950;vertical-align:middle}
+.day-empty{padding:24px 14px;text-align:center;color:var(--muted);font-weight:800}
+.day-unassigned{margin:4px 12px 14px;border:1px solid var(--line);border-radius:12px;background:#f9fafb;padding:10px 12px;font-size:12px;color:var(--muted)}
+.day-unassigned summary{font-weight:900;color:var(--text);cursor:pointer}
+.day-unassigned-names{margin-top:8px;line-height:1.8}
+@media(min-width:700px){.day-coverage{grid-template-columns:repeat(3,1fr)}.day-shift-card{grid-template-columns:1fr 1fr}}
+.event-row{background:var(--yellow)!important;font-size:12px;font-weight:800}
+.badge{display:inline-block;padding:3px 7px;border-radius:999px;font-size:11px;font-weight:800;background:#eef2ff;color:#3730a3}
+.list{padding:0 14px}
+.item{display:flex;gap:10px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}
+.item-main{flex:1;min-width:0}.item-main b{display:block}.item-main small{color:var(--muted)}
+.item-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.month-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:1px;background:var(--line);border-top:1px solid var(--line)}
+.month-head,.month-cell{background:#fff;padding:7px;min-height:72px}
+.month-head{min-height:auto;text-align:center;font-size:12px;font-weight:900}
+.month-cell.sat{background:var(--sat)}.month-cell.sun{background:var(--sun)}
+.daynum{font-weight:900;font-size:13px}.month-shift{font-size:11px;margin-top:5px;line-height:1.35}
+.month-shift b{display:block;color:var(--blue);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.copybox{white-space:pre-wrap;background:#f9fafb;border:1px solid var(--line);border-radius:12px;padding:12px;font-size:13px;line-height:1.6;max-height:55vh;overflow:auto}
+.hidden{display:none!important}
+.footer-note{font-size:12px;color:var(--muted);padding:10px 2px}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:flex-end;z-index:100}
+.modal-bg.show{display:flex}
+.modal{width:100%;background:#fff;border-radius:22px 22px 0 0;padding:18px;max-height:86vh;overflow:auto}
+.modal h2{margin:0 0 14px;font-size:20px}
+.field{margin-bottom:12px}.field label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+.field input,.field select,.field textarea{width:100%;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fff}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.actions{display:flex;gap:8px;margin-top:14px}.actions .btn{flex:1}
+.auth-card{max-width:520px;margin:32px auto;background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px}
+.auth-card h2{margin-top:0}
+.setup-note{font-size:12px;color:var(--muted);line-height:1.55}
+.topright{margin-left:auto;display:flex;gap:8px;align-items:center}
+.role-pill{font-size:11px;background:#eef2ff;color:#3730a3;border-radius:999px;padding:4px 8px;font-weight:900}
+.preset-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0 14px}
+.preset{border:1px solid var(--line);background:#fff;border-radius:12px;padding:11px 8px;font-weight:900;color:var(--text)}
+.preset.active{background:#111827;color:#fff;border-color:#111827}
+.quick-label{font-size:12px;color:var(--muted);font-weight:800;margin:4px 0 6px}
+.store-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 0 12px}
+.store-btn{border:1px solid var(--line);background:#fff;border-radius:12px;padding:10px 6px;font-weight:900}
+.draft-box{padding:12px 14px;background:#f8fafc;border-bottom:1px solid var(--line)}
+.draft-box b{display:block;margin-bottom:4px}
+.draft-box small{color:var(--muted);line-height:1.5}
+.req-dashboard{padding:12px 14px;border-bottom:1px solid var(--line);background:#fff}
+.req-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.req-stat{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:9px;text-align:center}
+.req-stat b{display:block;font-size:18px}.req-stat small{font-size:11px;color:var(--muted)}
+.workflow-btn{width:100%;margin-top:10px;padding:13px 12px;font-size:14px}
+.req-person{border-bottom:1px solid var(--line)}
+.req-person-head{padding:13px 14px;background:#f8fafc;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.req-person-head b{font-size:16px}.req-person-head small{display:block;color:var(--muted);margin-top:2px}
+.req-group{padding:12px 14px;border-top:1px solid var(--line)}
+.req-group:first-child{border-top:0}
+.req-group-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.req-group-main{min-width:0;flex:1}
+.req-group-main b{display:block;font-size:15px;line-height:1.45}
+.req-group-main small{display:block;color:var(--muted);margin-top:4px;line-height:1.45}
+.req-days{font-weight:900;color:var(--text)}
+.link-warning{font-size:11px;color:var(--orange);margin-top:4px}
+.manager-badge{display:inline-block;font-size:10px;font-weight:900;padding:3px 7px;border-radius:999px;background:#fff7ed;color:#c2410c;margin-left:6px}
+.staff-manage-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}
+.staff-manage-row:last-child{border-bottom:0}
+.staff-manage-main{min-width:0;flex:1}
+.staff-manage-main b{display:block}
+.staff-manage-main small{display:block;color:var(--muted);margin-top:3px;overflow-wrap:anywhere}
+.staff-manage-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.checkrow{display:flex;align-items:center;gap:9px;padding:10px 0;font-weight:800}
+.checkrow input{width:20px;height:20px}
+.req-type-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:0 0 14px}
+.req-type-btn{border:1px solid var(--line);background:#fff;border-radius:12px;padding:11px 8px;font-weight:900}
+.req-type-btn.active{background:#111827;color:#fff;border-color:#111827}
+.req-preview{background:#111827;color:#fff;border-radius:14px;padding:12px 14px;font-weight:900;text-align:center;margin:8px 0 14px;min-height:46px;display:flex;align-items:center;justify-content:center}
+.req-card{padding:12px 14px;border-bottom:1px solid var(--line)}
+.req-card-top{display:flex;gap:8px;align-items:flex-start;justify-content:space-between}
+.req-card-main{min-width:0;flex:1}.req-card-main b{display:block}.req-card-main small{display:block;color:var(--muted);margin-top:4px;line-height:1.4}
+.status-pending{background:#fff7ed;color:#9a3412}.status-approved{background:#ecfdf5;color:#047857}.status-rejected{background:#fef2f2;color:#b91c1c}
+.store-btn.active{background:#111827;color:#fff;border-color:#111827}
+@media(min-width:700px){
+ .modal-bg{align-items:center;justify-content:center}
+ .modal{max-width:540px;border-radius:22px}
+ .month-cell{min-height:110px}
+}
+
+.simple-help{font-size:12px;color:var(--muted);line-height:1.5;margin:-2px 0 10px}
+.move-check{display:flex;align-items:center;gap:10px;padding:13px 12px;border:1px solid var(--line);border-radius:12px;background:#f8fafc;font-weight:900;margin:10px 0}
+.move-check input{width:22px;height:22px}
+.auto-day{border-top:1px solid var(--line);padding:13px 0}
+.auto-day:first-child{border-top:0}
+.auto-day-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+.auto-day-head b{font-size:15px}.auto-day-head small{color:var(--muted)}
+.auto-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.auto-field{background:#f8fafc;border-radius:10px;padding:8px}
+.auto-field label{display:block;font-size:10px;color:var(--muted);font-weight:900;margin-bottom:4px}
+.auto-field input,.auto-field select{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px;background:white;font-weight:800}
+.auto-num{display:flex;align-items:center;gap:5px}
+.auto-num button{width:32px;height:32px;border:1px solid var(--line);background:#fff;border-radius:8px;font-weight:900}
+.auto-num input{width:52px;text-align:center}
+.auto-wide{grid-column:1/-1}
+.auto-summary{background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:10px 12px;font-size:12px;line-height:1.5;margin-bottom:10px}
+
+</style>
+</head>
+<body>
+
+<div id="setupView" class="auth-card hidden" style="display:none!important">
+  <h2>初期設定</h2>
+  <p class="setup-note">スタッフ全員で同じデータを共有するためにSupabaseを使います。Supabaseで作成した「Project URL」と「anon public key」を入力してください。入力値はこの端末だけに保存されます。</p>
+  <div class="field"><label>Supabase Project URL</label><input id="setupUrl" placeholder="https://xxxx.supabase.co"></div>
+  <div class="field"><label>Supabase anon public key</label><textarea id="setupKey" rows="5" placeholder="eyJ..."></textarea></div>
+  <button class="btn" id="saveSetup">設定を保存</button>
+  <p class="setup-note">まだSupabaseを作っていない場合は、同梱の README.md と supabase_setup.sql を使えばセットアップできます。</p>
+</div>
+
+<div id="authView" class="auth-card hidden">
+  <h2>SHIFT MANAGER</h2>
+  <div class="field"><label>メールアドレス</label><input id="authEmail" type="email" autocomplete="email"></div>
+  <div class="field"><label>パスワード</label><input id="authPassword" type="password" autocomplete="current-password"></div>
+  <div class="actions">
+    <button class="btn secondary" id="signupBtn">新規登録</button>
+    <button class="btn" id="loginBtn">ログイン</button>
+  </div>
+  <p class="setup-note">最初に登録したユーザーは自動で管理者になります。2人目以降はスタッフです。</p>
+  
+</div>
+
+<div id="appView" class="hidden">
+<header>
+  <div class="head">
+    <div style="display:flex;align-items:center;gap:8px">
+      <div>
+        <h1>SHIFT MANAGER</h1>
+        <div class="sub" id="storeTitle">共有シフト管理 V12.3 SAFE STAFF EDIT</div>
+      </div>
+      <div class="topright">
+        <span class="role-pill" id="rolePill"></span>
+        <button class="btn secondary small" id="logoutBtn">ログアウト</button>
+      </div>
+    </div>
+    <div class="toolbar admin-only">
+      <button class="btn" id="addStaffBtn">＋スタッフ</button>
+      <button class="btn secondary" id="manageStaffBtn">スタッフ管理</button>
+      <button class="btn secondary" id="eventBtn">イベント</button>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" data-tab="day">日別</button>
+    <button class="tab" data-tab="week">週間</button>
+    <button class="tab" data-tab="month">月間</button>
+    <button class="tab" data-tab="requests">希望</button>
+    <button class="tab" data-tab="share">LINE共有</button>
+  </div>
+</header>
+
+<main>
+  <section id="dayTab">
+    <div class="card">
+      <div class="day-summary">
+        <div class="day-nav">
+          <button class="btn secondary small" id="prevDay">← 前日</button>
+          <button class="btn secondary small" id="todayDay">今日</button>
+          <button class="btn secondary small" id="nextDay">翌日 →</button>
+        </div>
+        <div class="day-date-big" id="dayLabel"></div>
+        <div class="day-coverage" id="dayCoverage"></div>
+      </div>
+      <div class="section-title"><span>出勤スタッフ</span><small id="dayStaffCount"></small></div>
+      <div id="dayStaffList" class="day-staff-list"></div>
+      <div id="dayUnassigned"></div>
+    </div>
+  </section>
+
+  <section id="weekTab" class="hidden">
+    <div class="card">
+      <div class="section-title">
+        <span>週間シフト</span>
+        <div class="navrow">
+          <button class="btn secondary small" id="prevWeek">←</button>
+          <span id="weekLabel"></span>
+          <button class="btn secondary small" id="nextWeek">→</button>
+          <button class="btn secondary small" id="todayWeek">今週</button>
+        </div>
+      </div>
+      <div id="weekCoverage" class="coverage-wrap"></div><div class="table-wrap"><table id="weekTable"></table></div>
+    </div>
+  </section>
+
+  <section id="monthTab" class="hidden">
+    <div class="card">
+      <div class="section-title">
+        <span>月間シフト</span>
+        <div class="navrow">
+          <button class="btn secondary small" id="prevMonth">←</button>
+          <span id="monthLabel"></span>
+          <button class="btn secondary small" id="nextMonth">→</button>
+        </div>
+      </div>
+      <div id="monthGrid"></div>
+    </div>
+  </section>
+
+  <section id="requestsTab" class="hidden">
+    <div class="card">
+      <div class="section-title">
+        <span>希望シフト</span>
+        <button class="btn blue small" id="newRequestBtn">＋希望提出</button>
+      </div>
+      <div class="req-dashboard">
+        <div class="navrow" style="margin-top:0;justify-content:center">
+          <button class="btn secondary small" id="prevReqWeek">←</button>
+          <b id="reqWeekLabel"></b>
+          <button class="btn secondary small" id="nextReqWeek">→</button>
+          <button class="btn secondary small" id="todayReqWeek">今週</button>
+        </div>
+        <div class="req-stats" id="requestStats"></div>
+        <div class="navrow admin-only">
+          <button class="btn green small" id="approveAllBtn">未処理を一括承認</button>
+          <button class="btn blue small" id="autoDraftBtn">自動シフト設定</button>
+        </div>
+        <button class="btn blue workflow-btn admin-only" id="approveAndDraftBtn">未処理を全部承認 → 自動シフト作成</button>
+        <button class="btn secondary workflow-btn admin-only" id="seedTestBtn" style="margin-top:8px">🧪 9/14〜9/20 テスト10人を自動入力</button>
+        <button class="btn secondary workflow-btn admin-only" id="testNamesBtn" style="margin-top:8px;display:none">✏️ テスト10人の名前を変更</button>
+      </div>
+      <div class="draft-box admin-only">
+        <b>管理者の流れ：希望確認 → 承認 → 必要人数設定 → 自動作成</b>
+        <small>NPの必要人数を日ごとに変更でき、固定OPENスタッフを指定してから自動編成できます。不足は作成後に警告します。</small>
+      </div>
+      <div id="requestList"></div>
+    </div>
+  </section>
+
+  <section id="shareTab" class="hidden">
+    <div class="card">
+      <div class="section-title">
+        <span>LINE共有</span>
+        <button class="btn blue small" id="copyLineBtn">コピー</button>
+      </div>
+      <div style="padding:14px">
+        <div class="field">
+          <label>共有する週</label>
+          <input id="shareWeekDate" type="date">
+        </div>
+        <div class="copybox" id="linePreview"></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="footer-note">NP自動編成：OPEN〜23 / 23〜5 / 5〜LAST の最低人数を設定し、希望から自動作成。マネージャー兼スタッフ・代理提出・固定OPEN・不足警告にも対応。</div>
+</main>
+</div>
+
+<!-- Shift edit -->
+<div class="modal-bg" id="shiftModal">
+  <div class="modal">
+    <h2 id="shiftTitle">シフト編集</h2>
+    <div class="field"><label>表示</label><input id="shiftValue" placeholder="例：24〜L NL MT / 18〜5 NL NP"></div>
+    <div class="preset-grid">
+      <button type="button" class="preset" data-shift-preset="18〜23">18〜23</button>
+      <button type="button" class="preset" data-shift-preset="18〜5">18〜5</button>
+      <button type="button" class="preset" data-shift-preset="18〜6">18〜6</button>
+      <button type="button" class="preset" data-shift-preset="19〜L">19〜L</button>
+      <button type="button" class="preset" data-shift-preset="23〜L">23〜L</button>
+      <button type="button" class="preset" data-shift-preset="24〜L">24〜L</button>
+      <button type="button" class="preset" data-shift-preset="after〜L">after〜L</button>
+      <button type="button" class="preset" data-shift-preset="OPEN〜L">OPEN〜L</button>
+      <button type="button" class="preset" data-shift-preset="休み">休み</button>
+    </div>
+
+    <div class="quick-label">店舗を追加（続けて押せます）</div>
+    <div class="store-grid">
+      <button type="button" class="store-btn" data-store="NP">NP</button>
+      <button type="button" class="store-btn" data-store="NL">NL</button>
+      <button type="button" class="store-btn" data-store="MT">MT</button>
+      <button type="button" class="store-btn" data-store="33">33</button>
+    </div>
+
+    <div class="field"><label>ポジション</label>
+      <select id="shiftRole">
+        <option value="">未設定</option><option>OPEN</option><option>BAR</option><option>FLOOR</option>
+        <option>ENTRANCE</option><option>VIP</option><option>AFTER</option><option>DJ</option><option>MANAGER</option>
+      </select>
+    </div>
+    <div class="actions">
+      <button class="btn secondary" id="clearShiftBtn">空欄</button>
+      <button class="btn" id="saveShiftBtn">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Staff -->
+<div class="modal-bg" id="staffModal">
+  <div class="modal">
+    <h2>スタッフ追加</h2>
+    <div class="field"><label>名前</label><input id="staffName"></div>
+    <div class="field"><label>メール</label><input id="staffEmail" type="email" placeholder="ログインに使うメール"></div>
+    <label class="checkrow"><input id="staffManager" type="checkbox"> 管理者（マネージャー）にする</label>
+    <div class="notice" style="margin-bottom:10px">マネージャーもスタッフとしてシフト表に表示されます。管理者権限でログインする場合は、このメールと同じメールでアカウント登録してください。</div>
+    <div class="actions">
+      <button class="btn secondary" data-close="staffModal">キャンセル</button>
+      <button class="btn" id="saveStaffBtn">追加</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="manageStaffModal">
+  <div class="modal">
+    <h2>スタッフ管理</h2>
+    <div class="notice" style="margin-bottom:10px">「管理者」にしたスタッフは、通常のスタッフとしてシフトに入りながら、希望承認・自動シフト・スタッフ管理もできます。</div>
+    <div id="staffManageList"></div>
+    <div class="actions"><button class="btn" data-close="manageStaffModal">閉じる</button></div>
+  </div>
+</div>
+
+<!-- Request -->
+<div class="modal-bg" id="requestModal"><div class="modal">
+<h2>希望シフト提出</h2>
+<div class="field"><label>スタッフ</label><select id="reqStaff"></select></div>
+<div class="field"><label>日付</label><input id="reqDate" type="date"></div>
+<div class="quick-label">働ける時間</div>
+<div class="preset-grid">
+<button type="button" class="preset req-preset" data-start="18:00" data-end="23:00">18〜23</button>
+<button type="button" class="preset req-preset" data-start="18:00" data-end="05:00">18〜5</button>
+<button type="button" class="preset req-preset" data-start="18:00" data-end="06:00">18〜6</button>
+<button type="button" class="preset req-preset" data-start="21:00" data-end="05:00">21〜5</button>
+<button type="button" class="preset req-preset" data-start="24:00" data-end="06:00">24〜6</button>
+<button type="button" class="preset req-preset" data-start="24:00" data-end="08:00">24〜8</button>
+<button type="button" class="preset req-preset" data-start="18:00" data-end="LAST">18〜L</button>
+<button type="button" class="preset req-preset" data-start="19:00" data-end="LAST">19〜L</button>
+<button type="button" class="preset req-preset" data-start="23:00" data-end="05:00">23〜5</button>
+<button type="button" class="preset req-preset" data-start="23:00" data-end="LAST">23〜L</button>
+<button type="button" class="preset req-preset" data-start="24:00" data-end="LAST">24〜L</button>
+<button type="button" class="preset req-preset" data-start="05:00" data-end="LAST">5〜L</button>
+<button type="button" class="preset req-off-btn" id="reqOffBtn">休み</button>
+</div>
+<div class="row"><div class="field"><label>開始（手入力可）</label><input id="reqStart" placeholder="18:00"></div><div class="field"><label>終了</label><input id="reqEnd" placeholder="LAST"></div></div>
+<label class="move-check"><input id="reqMoveOk" type="checkbox"><span>店舗移動OK</span></label>
+<div class="simple-help">マネージャーから移動可能の指示があった日だけチェック。チェックなしの日は自動シフトで店舗移動させません。</div>
+<div class="req-preview" id="reqPreview">時間を選択してください</div>
+<div class="field"><label>メモ（任意）</label><textarea id="reqMemo" rows="2" placeholder="例：23時からなら確実"></textarea></div>
+<div class="actions"><button class="btn secondary" data-close="requestModal">閉じる</button><button class="btn blue" id="saveRequestBtn">提出</button></div>
+<button class="btn secondary" id="saveNextRequestBtn" style="width:100%;margin-top:8px">同じ内容で翌日へ →</button>
+</div></div>
+
+<!-- Auto schedule settings -->
+<div class="modal-bg" id="autoConfigModal"><div class="modal">
+<h2>NP 自動シフト設定 <span style="font-size:12px;color:#2563eb">V12</span></h2>
+<div class="auto-summary">基本：OPEN〜23時 <b>2人</b> / 23〜5時 <b>3人</b> / 5時〜LAST <b>平日2人・週末4人</b><br><b>金・土を先に作成</b>し、希望で出した勤務時間は勝手に変更しません。足りない場合は不足表示にします。</div>
+<div class="simple-help" style="margin-bottom:10px"><b>一度設定した内容は自動で記憶</b>します。次の週も同じ曜日設定をそのまま使えます。</div>
+<div id="autoDays"></div>
+<div class="auto-day" style="margin-top:10px">
+  <div class="auto-day-head"><b>休み曜日を自動で決めるスタッフ</b><small>例：週1休み・曜日はどこでもOK</small></div>
+  <div class="auto-grid">
+    <div class="auto-field auto-wide"><label>スタッフ</label><select id="autoFlexStaff"><option value="">指定なし</option></select></div>
+    <div class="auto-field"><label>この週の休み日数</label><input id="autoFlexOffDays" type="number" min="0" max="6" value="1"></div>
+  </div>
+  <div class="simple-help">選んだスタッフは、その週の通常の希望時間を基準に、休み曜日だけ自動で調整します。金・土を優先して出勤させます。</div>
+</div>
+<div class="actions"><button class="btn secondary" data-close="autoConfigModal">キャンセル</button><button class="btn blue" id="runAutoScheduleBtn">この条件で自動作成</button></div>
+</div></div>
+
+<!-- Test staff names -->
+<div class="modal-bg" id="testNamesModal"><div class="modal">
+<h2>テスト10人の名前</h2>
+<div class="simple-help">ここで一度保存すると、次回のテスト入力でも同じ名前を使います。</div>
+<div id="testNameFields" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px"></div>
+<div class="actions"><button class="btn secondary" data-close="testNamesModal">キャンセル</button><button class="btn blue" id="saveTestNamesBtn">名前を保存</button></div>
+</div></div>
+
+<!-- Event -->
+<div class="modal-bg" id="eventModal">
+  <div class="modal">
+    <h2>イベント登録</h2>
+    <div class="field"><label>日付</label><input id="eventDate" type="date"></div>
+    <div class="field"><label>イベント名</label><input id="eventName" placeholder="Salsa / private party"></div>
+    <div class="field"><label>時間</label><input id="eventTime" placeholder="18〜23"></div>
+    <div class="actions">
+      <button class="btn secondary" data-close="eventModal">キャンセル</button>
+      <button class="btn" id="saveEventBtn">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let supabaseClient=null, currentUser=null, profile=null;
+let staff=[], shifts=[], requests=[], events=[], managerEmails=[];
+let weekStart = getMonday(new Date()), dayCursor=new Date(), monthCursor=new Date(new Date().getFullYear(),new Date().getMonth(),1);
+dayCursor.setHours(0,0,0,0);
+let activeShift=null, requestWeekStart=getMonday(new Date()), reqStores=[];
+
+const $=id=>document.getElementById(id);
+const show=id=>$(id).classList.add('show');
+const hide=id=>$(id).classList.remove('show');
+const fmt=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const parseDate=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
+function getMonday(d){const x=new Date(d);const day=x.getDay();x.setDate(x.getDate()-(day===0?6:day-1));x.setHours(0,0,0,0);return x}
+function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x}
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+function normEmail(v){return String(v||'').trim().toLowerCase()}
+function isManagerEmail(email){return managerEmails.includes(normEmail(email))}
+function isAdmin(){const r=String(profile?.role||'').toLowerCase();return r==='admin'||r==='manager'||isManagerEmail(currentUser?.email)}
+function managerMetaEvent(){return events.find(e=>e.name==='__SHIFT_MANAGER_MANAGERS__')}
+function readManagerEmails(){
+  const meta=managerMetaEvent();
+  if(!meta?.time_text)return [];
+  try{
+    const a=JSON.parse(meta.time_text);
+    return Array.isArray(a)?[...new Set(a.map(normEmail).filter(Boolean))]:[];
+  }catch{return []}
+}
+async function saveManagerEmails(list){
+  const emails=[...new Set(list.map(normEmail).filter(Boolean))];
+  const existing=managerMetaEvent();
+  const row={date:'2099-01-01',name:'__SHIFT_MANAGER_MANAGERS__',time_text:JSON.stringify(emails)};
+  const q=existing
+    ? supabaseClient.from('events').update(row).eq('id',existing.id)
+    : supabaseClient.from('events').insert(row);
+  const {error}=await q;
+  if(error)throw error;
+  managerEmails=emails;
+}
+
+function initConfig(){
+  const url='https://qnozpavhwlekgbwednlh.supabase.co';
+  const key='sb_publishable_qEkraX86eJeE6g0SqFs06g_l_nbZOuK';
+  localStorage.setItem('sm_supabase_url',url);
+  localStorage.setItem('sm_supabase_key',key);
+  supabaseClient = window.supabase.createClient(url,key);
+  return true;
+}
+
+async function boot(){
+  if(!initConfig()) return;
+  const {data:{session}}=await supabaseClient.auth.getSession();
+  if(!session){$('authView').classList.remove('hidden');return}
+  currentUser=session.user;
+  await enterApp();
+}
+async function enterApp(){
+  $('setupView').classList.add('hidden');$('authView').classList.add('hidden');$('appView').classList.remove('hidden');
+  const {data:p}=await supabaseClient.from('profiles').select('*').eq('id',currentUser.id).single();
+  profile=p;
+  await loadAll();
+  applyPermissions();
+}
+function applyPermissions(){
+  $('rolePill').textContent=isAdmin()?'管理者 / MANAGER':'スタッフ';
+  document.querySelectorAll('.admin-only').forEach(x=>x.classList.toggle('hidden',!isAdmin()));
+}
+async function loadAll(){
+  const [a,b,c,d]=await Promise.all([
+    supabaseClient.from('staff').select('*').order('sort_order').order('created_at'),
+    supabaseClient.from('shifts').select('*'),
+    supabaseClient.from('shift_requests').select('*').order('date',{ascending:true}),
+    supabaseClient.from('events').select('*')
+  ]);
+  staff=a.data||[];shifts=b.data||[];requests=c.data||[];events=d.data||[];
+  managerEmails=readManagerEmails();
+  renderAll();
+  applyPermissions();
+}
+function renderAll(){renderDay();renderWeek();renderMonth();renderRequests();renderLine();}
+
+$('saveSetup').onclick=()=>{
+  const url=$('setupUrl').value.trim(), key=$('setupKey').value.trim();
+  if(!url||!key)return alert('URLとキーを入力してください');
+  localStorage.setItem('sm_supabase_url',url);localStorage.setItem('sm_supabase_key',key);location.reload();
+};
+
+$('signupBtn').onclick=async()=>{
+  const email=$('authEmail').value.trim(),password=$('authPassword').value;
+  const {error}=await supabaseClient.auth.signUp({email,password});
+  if(error)return alert(error.message);
+  alert('登録しました。メール確認が有効な場合は確認後にログインしてください。');
+};
+$('loginBtn').onclick=async()=>{
+  const {data,error}=await supabaseClient.auth.signInWithPassword({email:$('authEmail').value.trim(),password:$('authPassword').value});
+  if(error)return alert(error.message);
+  currentUser=data.user;await enterApp();
+};
+$('logoutBtn').onclick=async()=>{await supabaseClient.auth.signOut();location.reload()};
+
+document.querySelectorAll('.tab').forEach(btn=>btn.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));btn.classList.add('active');
+  ['day','week','month','requests','share'].forEach(k=>$(k+'Tab').classList.toggle('hidden',k!==btn.dataset.tab));
+  if(btn.dataset.tab==='day')renderDay();
+  if(btn.dataset.tab==='share')renderLine();
+});
+
+
+function displayShiftText(value){
+  let v=String(value||'').trim();
+  // 24時を「0時」と表示しない。過去に保存された 0〜 も画面上は24〜に直す。
+  v=v.replace(/^0〜/,'24〜').replace(/^0-/,'24-');
+  return v;
+}
+function shiftHtml(value){
+  const safe=esc(displayShiftText(value));
+  return safe.replace(/\s*→\s*/g,'<br>→ ');
+}
+function parseShiftRangeForCoverage(value,cfg){
+  const v=displayShiftText(value).replace(/\s+(NP|NL|MT|33)(\s.*)?$/,'').trim();
+  if(!v||v==='休み')return null;
+  const m=v.match(/^(OPEN|after|\d{1,2})(?:[:：]\d{2})?\s*[〜~-]\s*(L|LAST|\d{1,2})(?:[:：]\d{2})?/i);
+  if(!m)return null;
+  const cv=(x,isEnd=false)=>{x=String(x).toUpperCase();if(x==='OPEN')return cfg.open;if(x==='AFTER')return 29;if(x==='L'||x==='LAST')return cfg.last;let h=Number(x);if(h===24)return 24;if(h<12)h+=24;return h};
+  let a=cv(m[1]),b=cv(m[2],true);if(b<=a)b+=24;return {start:a,end:Math.min(b,cfg.last)};
+}
+function coverageCountForDay(date,cfg){
+  const ranges=shifts.filter(x=>x.date===date&&x.display_text).map(x=>parseShiftRangeForCoverage(x.display_text,cfg)).filter(Boolean);
+  const covers=(from,to)=>ranges.filter(r=>r.start<=from&&r.end>=to).length;
+  return {open:covers(cfg.open,23),night:covers(23,29),after:covers(29,cfg.last)};
+}
+function hourlyCoverageForDay(date,cfg){
+  const ranges=shifts.filter(x=>x.date===date&&x.display_text).map(x=>parseShiftRangeForCoverage(x.display_text,cfg)).filter(Boolean);
+  const hour={};for(let h=cfg.open;h<cfg.last;h++)hour[h]=ranges.filter(r=>r.start<=h&&r.end>=h+1).length;
+  const segMin=(a,b)=>{const vals=[];for(let h=a;h<b;h++)vals.push(hour[h]||0);return vals.length?Math.min(...vals):0};
+  return {hour,open:segMin(cfg.open,23),night:segMin(23,29),after:segMin(29,cfg.last)};
+}
+function renderDay(){
+  if(!$('dayLabel'))return;
+  const date=fmt(dayCursor),d=parseDate(date),cfg=defaultDayConfig(date),c=hourlyCoverageForDay(date,cfg);
+  $('dayLabel').textContent=`${d.getMonth()+1}/${d.getDate()}（${'日月火水木金土'[d.getDay()]}）`;
+  const row=(label,now,need)=>`<div class="day-cover-row ${now>=need?'okay':'short'}"><span class="day-cover-label">${label}</span><span class="day-cover-num">${now}/${need}人 ${now>=need?'✓':'⚠ 不足'+(need-now)+'人'}</span></div>`;
+  $('dayCoverage').innerHTML=row(`${cfg.open}〜23`,c.open,cfg.minOpen)+row('23〜5',c.night,cfg.minNight)+row('5〜LAST',c.after,cfg.minAfter);
+  const active=staff.filter(x=>x.active!==false);
+  const assigned=active.map(s=>({s,sh:shifts.find(x=>String(x.staff_id)===String(s.id)&&x.date===date)})).filter(x=>x.sh?.display_text&&x.sh.display_text!=='休み');
+  $('dayStaffCount').textContent=`${assigned.length}人`;
+  $('dayStaffList').innerHTML=assigned.length?assigned.map(({s,sh})=>`<div class="day-shift-card" ${isAdmin()?`onclick="openShift('${s.id}','${date}')" style="cursor:pointer"`:''}><div class="day-staff-name">${esc(s.name)}${sh.role==='OPEN'?'<span class="day-open-badge">OPEN</span>':''}</div><div class="day-shift-time">${shiftHtml(sh.display_text)}</div></div>`).join(''):'<div class="day-empty">この日のシフトはまだありません</div>';
+  const unassigned=active.filter(s=>!assigned.some(x=>String(x.s.id)===String(s.id)));
+  $('dayUnassigned').innerHTML=unassigned.length?`<details class="day-unassigned"><summary>未配置・休み ${unassigned.length}人</summary><div class="day-unassigned-names">${unassigned.map(s=>esc(s.name)).join(' / ')}</div></details>`:'';
+}
+function renderWeekCoverage(days){
+  $('weekCoverage').innerHTML=days.map(d=>{
+    const date=fmt(d),cfg=defaultDayConfig(date),c=coverageCountForDay(date,cfg),cls=d.getDay()===6?'sat':d.getDay()===0?'sun':'';
+    const line=(label,now,need)=>`<div class="coverage-line"><span>${label}</span><span class="${now>=need?'coverage-ok':'coverage-short'}">${now}/${need}人${now<need?' 不足'+(need-now):' ✓'}</span></div>`;
+    return `<div class="coverage-day ${cls}"><div class="coverage-date">${d.getMonth()+1}/${d.getDate()}（${'日月火水木金土'[d.getDay()]}）</div>${line(`${cfg.open}〜23`,c.open,cfg.minOpen)}${line('23〜5',c.night,cfg.minNight)}${line('5〜LAST',c.after,cfg.minAfter)}</div>`;
+  }).join('');
+}
+function renderWeek(){
+  const days=[...Array(7)].map((_,i)=>addDays(weekStart,i));
+  $('weekLabel').textContent=`${days[0].getMonth()+1}/${days[0].getDate()}〜${days[6].getMonth()+1}/${days[6].getDate()}`;
+  renderWeekCoverage(days);
+  let h='<thead><tr><th>STAFF</th>';
+  days.forEach(d=>h+=`<th class="${d.getDay()===6?'sat':d.getDay()===0?'sun':''}">${d.getMonth()+1}/${d.getDate()}<br>${'日月火水木金土'[d.getDay()]}</th>`);
+  h+='</tr></thead><tbody>';
+  staff.filter(x=>x.active!==false).forEach(s=>{
+    h+=`<tr><td class="staff-cell">${esc(s.name)}</td>`;
+    days.forEach(d=>{
+      const sh=shifts.find(x=>x.staff_id===s.id&&x.date===fmt(d));
+      const cls=d.getDay()===6?'sat':d.getDay()===0?'sun':'';
+      const role=sh?.role==='OPEN'?'<span class="open-badge">OPEN</span>':'';
+      if(isAdmin()) h+=`<td class="${cls}"><button class="shift-btn ${sh?.display_text?'':'empty'}" onclick="openShift('${s.id}','${fmt(d)}')">${sh?.display_text?shiftHtml(sh.display_text):'＋'}${role}</button></td>`;
+      else h+=`<td class="${cls}"><span style="font-weight:900;color:${sh?.display_text?'var(--blue)':'#c7cbd1'}">${sh?.display_text?shiftHtml(sh.display_text):'—'}${role}</span></td>`;
+    });
+    h+='</tr>';
+  });
+  h+='</tbody>';$('weekTable').innerHTML=h;
+}
+window.openShift=(staffId,date)=>{
+  if(!isAdmin())return;
+  const s=staff.find(x=>x.id===staffId), sh=shifts.find(x=>x.staff_id===staffId&&x.date===date);
+  activeShift={staffId,date,id:sh?.id||null};
+  $('shiftTitle').textContent=`${s?.name||''} / ${date}`;
+  $('shiftValue').value=sh?.display_text||'';$('shiftRole').value=sh?.role||'';
+  document.querySelectorAll('[data-shift-preset]').forEach(b=>b.classList.toggle('active',b.dataset.shiftPreset===$('shiftValue').value.trim()));
+  show('shiftModal');
+};
+
+function setPreset(value){
+  $('shiftValue').value=value;
+  document.querySelectorAll('[data-shift-preset]').forEach(b=>b.classList.toggle('active',b.dataset.shiftPreset===value));
+}
+document.querySelectorAll('[data-shift-preset]').forEach(b=>b.onclick=()=>setPreset(b.dataset.shiftPreset));
+document.querySelectorAll('[data-store]').forEach(b=>b.onclick=()=>{
+  const cur=$('shiftValue').value.trim();
+  if(!cur || cur==='休み') return;
+
+  // Store buttons append in the order tapped.
+  // Example: 24〜L -> 24〜L NL -> 24〜L NL MT
+  const stores=['NP','NL','MT','33'];
+  const tokens=cur.split(/\s+/).filter(Boolean);
+  const store=b.dataset.store;
+
+  // Avoid accidental immediate duplicate taps, but otherwise allow
+  // multiple stores in sequence.
+  if(tokens[tokens.length-1]!==store){
+    tokens.push(store);
+  }
+  $('shiftValue').value=tokens.join(' ');
+  document.querySelectorAll('[data-shift-preset]').forEach(x=>x.classList.remove('active'));
+});
+$('shiftValue').addEventListener('input',()=>document.querySelectorAll('[data-shift-preset]').forEach(b=>b.classList.toggle('active',b.dataset.shiftPreset===$('shiftValue').value.trim())));
+
+
+function renderStaffManagement(){
+  const rows=staff.slice().sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+  $('staffManageList').innerHTML=rows.length?rows.map(s=>{
+    const manager=isManagerEmail(s.email);
+    return `<div class="staff-manage-row">
+      <div class="staff-manage-main">
+        <b>${esc(s.name)}${manager?'<span class="manager-badge">MANAGER</span>':''}</b>
+        <small>${esc(s.email||'メール未登録')} / ${s.active===false?'非表示':'表示中'}</small>
+      </div>
+      <div class="staff-manage-actions">
+        <button class="btn secondary small" onclick="editStaffName('${s.id}')">名前変更</button>
+        <button class="btn ${manager?'secondary':'green'} small" onclick="toggleManager('${s.id}')">${manager?'管理者解除':'管理者にする'}</button>
+        <button class="btn secondary small" onclick="toggleStaffActive('${s.id}')">${s.active===false?'表示':'非表示'}</button>
+        <button class="btn danger small" onclick="deleteStaff('${s.id}')">削除</button>
+      </div>
+    </div>`;
+  }).join(''):'<div class="notice">スタッフがまだいません。</div>';
+}
+
+$('addStaffBtn').onclick=()=>{
+  $('staffName').value='';
+  $('staffEmail').value='';
+  $('staffManager').checked=false;
+  show('staffModal');
+};
+
+$('manageStaffBtn').onclick=()=>{
+  renderStaffManagement();
+  show('manageStaffModal');
+};
+
+$('saveStaffBtn').onclick=async()=>{
+  if(!isAdmin())return;
+  const name=$('staffName').value.trim();
+  const email=normEmail($('staffEmail').value);
+  const makeManager=$('staffManager').checked;
+  if(!name)return alert('名前を入力してください。');
+  if(makeManager&&!email)return alert('管理者にする場合はメールアドレスを入力してください。');
+
+  const maxSort=staff.reduce((m,s)=>Math.max(m,Number(s.sort_order)||0),0);
+  const row={name,email:email||null,active:true,sort_order:maxSort+1};
+  const {data,error}=await supabaseClient.from('staff').insert(row).select().single();
+  if(error)return alert(error.message);
+
+  if(makeManager){
+    try{await saveManagerEmails([...managerEmails,email])}
+    catch(e){return alert('スタッフは追加されましたが、管理者設定に失敗しました: '+e.message)}
+  }
+  hide('staffModal');
+  await loadAll();
+};
+
+window.editStaffName=async(id)=>{
+  if(!isAdmin())return;
+  const st=staff.find(x=>String(x.id)===String(id));
+  if(!st)return;
+  const oldName=String(st.name||'').trim();
+  const next=prompt('新しいスタッフ名を入力してください',oldName);
+  if(next===null)return;
+  const name=next.trim();
+  if(!name)return alert('名前を入力してください。');
+  if(staff.some(x=>String(x.id)!==String(id)&&String(x.name||'').trim().toLowerCase()===name.toLowerCase()))return alert('同じ名前のスタッフがすでにいます。');
+  if(name===oldName)return;
+  const {error}=await supabaseClient.from('staff').update({name}).eq('id',id);
+  if(error)return alert('名前を変更できませんでした。\n'+error.message);
+  try{
+    const saved=getTestNames();
+    const updated=saved.map(x=>x===oldName?name:x);
+    if(updated.some((x,i)=>x!==saved[i]))localStorage.setItem(TEST_NAMES_KEY,JSON.stringify(updated));
+  }catch(e){ console.warn('test name sync skipped',e); }
+  await loadAll();
+  renderStaffManagement();
+};
+
+window.toggleManager=async(id)=>{
+  if(!isAdmin())return;
+  const s=staff.find(x=>String(x.id)===String(id));
+  if(!s)return;
+  const email=normEmail(s.email);
+  if(!email)return alert('このスタッフにはメールが登録されていません。管理者にするにはメールが必要です。');
+  const manager=isManagerEmail(email);
+  const next=manager?managerEmails.filter(x=>x!==email):[...managerEmails,email];
+  const action=manager?'管理者権限を解除':'管理者権限を付与';
+  if(!confirm(`${s.name} の${action}しますか？`))return;
+  try{
+    await saveManagerEmails(next);
+    await loadAll();
+    renderStaffManagement();
+  }catch(e){alert(e.message)}
+};
+
+window.toggleStaffActive=async(id)=>{
+  if(!isAdmin())return;
+  const s=staff.find(x=>String(x.id)===String(id));
+  if(!s)return;
+  const {error}=await supabaseClient.from('staff').update({active:s.active===false?true:false}).eq('id',id);
+  if(error)return alert(error.message);
+  await loadAll();
+  renderStaffManagement();
+};
+
+window.deleteStaff=async(id)=>{
+  if(!isAdmin())return;
+  const s=staff.find(x=>String(x.id)===String(id));
+  if(!s)return;
+  if(!confirm(`${s.name} を削除しますか？\nシフト履歴がある場合は「非表示」の方がおすすめです。`))return;
+
+  // Remove manager privilege first if applicable.
+  const email=normEmail(s.email);
+  if(email&&isManagerEmail(email)){
+    try{await saveManagerEmails(managerEmails.filter(x=>x!==email))}
+    catch(e){return alert(e.message)}
+  }
+  const {error}=await supabaseClient.from('staff').delete().eq('id',id);
+  if(error)return alert('削除できませんでした。シフト履歴がある場合は「非表示」を使ってください。\n'+error.message);
+  await loadAll();
+  renderStaffManagement();
+};
+
+
+function requestLabel(t){return {available:'出勤可能',prefer:'出勤希望',prefer_off:'できれば休み',off:'絶対休み'}[t]||t}
+function statusLabel(s){return {pending:'未処理',approved:'承認済',rejected:'却下'}[s]||s}
+function statusClass(s){return `status-${s||'pending'}`}
+function requestMeta(memo){
+  const raw=memo||'';
+  const sm=raw.match(/\[\[STORES:([^\]]*)\]\]/);
+  const im=raw.match(/\[\[STAFF:([^\]]*)\]\]/);
+  const mm=raw.match(/\[\[MOVE:(0|1)\]\]/);
+  const stores=sm&&sm[1]?sm[1].split(',').map(x=>x.trim()).filter(Boolean):[];
+  const staffId=im&&im[1]?im[1].trim():'';
+  const moveOk=mm?mm[1]==='1':false;
+  const clean=raw.replace(/^(?:\[\[(?:STORES|STAFF|MOVE):[^\]]*\]\]\s*)+/,'');
+  return {stores,staffId,moveOk,memo:clean};
+}
+function encodeRequestMemo(stores,memo,staffId='',moveOk=false){
+  let meta='';
+  if(stores&&stores.length)meta+=`[[STORES:${stores.join(',')}]] `;
+  if(staffId)meta+=`[[STAFF:${staffId}]] `;
+  meta+=`[[MOVE:${moveOk?1:0}]] `;
+  return meta+(memo||'').trim();
+}
+function normTime(v,isEnd=false){
+  const s=(v||'').trim();
+  if(!s)return '';
+  if(isEnd&&/^(last|l)$/i.test(s))return 'L';
+  return s.replace(':00','');
+}
+function requestToShiftText(r){
+  if(r.request_type==='off')return '休み';
+  const start=(r.start_text||'').trim(),end=(r.end_text||'').trim();
+  if(start&&end)return `${normTime(start)}〜${normTime(end,true)}`;
+  if(start)return `${normTime(start)}〜L`;
+  return '出勤希望';
+}
+function reqWeekEnd(){return addDays(requestWeekStart,6)}
+function isInRequestWeek(r){return r.date>=fmt(requestWeekStart)&&r.date<=fmt(reqWeekEnd())}
+function requestStaff(r){
+  const meta=requestMeta(r.memo);
+  if(meta.staffId){
+    const linked=staff.find(s=>String(s.id)===String(meta.staffId));
+    if(linked)return linked;
+  }
+  // Legacy requests created before staff selection existed may still fall back to email.
+  return staff.find(s=>s.email&&(s.email||'').toLowerCase()===(r.user_email||'').toLowerCase())||null;
+}
+function requestWho(r){return requestStaff(r)?.name||r.user_email||'スタッフ'}
+function updateReqPreview(){
+  const off=$('reqOffBtn').classList.contains('active');
+  let txt='';
+  if(off)txt='休み';
+  else{const s=normTime($('reqStart').value),e=normTime($('reqEnd').value,true);txt=s?(e?`${s}〜${e}`:`${s}〜L`):'時間を選択してください';if($('reqMoveOk').checked)txt+=' / 移動OK';}
+  $('reqPreview').textContent=txt;
+}
+function resetRequestModal(date){
+  const activeStaff=staff.filter(s=>s.active!==false);
+  $('reqStaff').innerHTML=activeStaff.map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+  const byEmail=activeStaff.find(s=>s.email&&normEmail(s.email)===normEmail(currentUser.email));if(byEmail)$('reqStaff').value=byEmail.id;
+  $('reqDate').value=date||fmt(new Date());$('reqStart').value='';$('reqEnd').value='';$('reqMemo').value='';$('reqMoveOk').checked=false;$('reqOffBtn').classList.remove('active');document.querySelectorAll('.req-preset').forEach(b=>b.classList.remove('active'));updateReqPreview();
+}
+document.querySelectorAll('.req-preset').forEach(b=>b.onclick=()=>{$('reqStart').value=b.dataset.start;$('reqEnd').value=b.dataset.end;$('reqOffBtn').classList.remove('active');document.querySelectorAll('.req-preset').forEach(x=>x.classList.toggle('active',x===b));updateReqPreview();});
+$('reqOffBtn').onclick=()=>{const on=!$('reqOffBtn').classList.contains('active');$('reqOffBtn').classList.toggle('active',on);if(on){$('reqStart').value='';$('reqEnd').value='';document.querySelectorAll('.req-preset').forEach(x=>x.classList.remove('active'))}updateReqPreview();};
+['reqStart','reqEnd'].forEach(id=>$(id).addEventListener('input',()=>{$('reqOffBtn').classList.remove('active');updateReqPreview()}));
+$('reqMoveOk').addEventListener('change',updateReqPreview);
+async function saveRequest(goNext=false){
+  const date=$('reqDate').value;if(!date)return alert('日付を選んでください。');const staffId=$('reqStaff').value;if(!staffId)return alert('スタッフを選んでください。');const off=$('reqOffBtn').classList.contains('active');if(!off&&!$('reqStart').value.trim())return alert('働ける時間か「休み」を選んでください。');
+  const row={user_id:currentUser.id,user_email:currentUser.email||null,date,request_type:off?'off':'prefer',start_text:off?null:($('reqStart').value.trim()||null),end_text:off?null:($('reqEnd').value.trim()||null),memo:encodeRequestMemo([],$('reqMemo').value,staffId,$('reqMoveOk').checked),status:'pending'};
+  const existing=requests.find(r=>r.date===date&&String(requestMeta(r.memo).staffId)===String(staffId));const q=existing?supabaseClient.from('shift_requests').update(row).eq('id',existing.id):supabaseClient.from('shift_requests').insert(row);const {error}=await q;if(error)return alert(error.message);
+  const keep={staffId,start:$('reqStart').value,end:$('reqEnd').value,memo:$('reqMemo').value,move:$('reqMoveOk').checked,off};await loadAll();
+  if(goNext){$('reqDate').value=fmt(addDays(parseDate(date),1));$('reqStaff').value=keep.staffId;$('reqStart').value=keep.start;$('reqEnd').value=keep.end;$('reqMemo').value=keep.memo;$('reqMoveOk').checked=keep.move;$('reqOffBtn').classList.toggle('active',keep.off);updateReqPreview();}else hide('requestModal');
+}
+
+async function approveAllThisWeek(){
+  if(!isAdmin())return;
+  const ids=requests.filter(r=>isInRequestWeek(r)&&r.status==='pending').map(r=>r.id);
+  if(!ids.length)return alert('この週に未処理の希望はありません。');
+  if(!confirm(`${ids.length}件を一括承認しますか？`))return;
+  const {error}=await supabaseClient.from('shift_requests').update({status:'approved'}).in('id',ids);
+  if(error)return alert(error.message);await loadAll();
+}
+
+function toTimelineHour(value,openHour=18,lastHour=33){const raw=String(value||'').trim().toLowerCase();if(!raw)return null;if(raw==='open')return openHour;if(raw==='after')return 29;if(raw==='last'||raw==='l')return lastHour;const m=raw.match(/^(\d{1,2})(?::\d{2})?$/);if(!m)return null;let h=Number(m[1]);if(h<12)h+=24;return h;}
+function displayHour(h,lastHour){if(h===lastHour)return 'L';if(h===24)return '24';return h>24?String(h-24):String(h)}
+function requestAvailability(r,cfg){if(r.request_type==='off')return null;let s=toTimelineHour(r.start_text,cfg.open,cfg.last),e=toTimelineHour(r.end_text||'LAST',cfg.open,cfg.last);if(s==null)return null;if(e==null)e=cfg.last;if(e<=s)e+=24;e=Math.min(e,cfg.last);s=Math.max(s,cfg.open);return e>s?{start:s,end:e}:null}
+function requiredAt(h,cfg){if(h<23)return cfg.minOpen;if(h<29)return cfg.minNight;return cfg.minAfter}
+function candidateTemplates(av,cfg){
+  // V11: 希望時間をそのまま使う。自動生成が 24〜L → 5〜L 等へ勝手に変更しない。
+  return av&&av.end>av.start?[{start:av.start,end:av.end}]:[];
+}
+function coverageForAssignments(as,cfg){const cov={};for(let h=cfg.open;h<cfg.last;h++)cov[h]=0;for(const a of as)for(let h=Math.max(cfg.open,a.start);h<Math.min(cfg.last,a.end);h++)cov[h]=(cov[h]||0)+1;return cov}
+function deficits(cov,cfg){const a=[];for(let h=cfg.open;h<cfg.last;h++){const d=requiredAt(h,cfg)-(cov[h]||0);if(d>0)a.push({h,d})}return a}
+function chooseBestCandidate(people,as,cfg){const cov=coverageForAssignments(as,cfg);let best=null;for(const p of people){if(as.some(a=>a.staff.id===p.staff.id))continue;for(const c of p.candidates){let benefit=0,extra=0;for(let h=c.start;h<c.end;h++){if(h<cfg.open||h>=cfg.last)continue;const need=Math.max(0,requiredAt(h,cfg)-(cov[h]||0));if(need>0)benefit+=need;else extra++}if(!benefit)continue;const score=benefit*100-extra*3-(c.end-c.start);if(!best||score>best.score)best={...c,staff:p.staff,request:p.request,fixed:false,score}}}return best}
+function optimizeAssignments(as,people,cfg){for(const a of as.filter(x=>!x.fixed)){const p=people.find(x=>x.staff.id===a.staff.id);if(!p)continue;for(const c of p.candidates.slice().sort((x,y)=>(x.end-x.start)-(y.end-y.start))){const test=as.map(x=>x===a?{...a,start:c.start,end:c.end}:x);if(deficits(coverageForAssignments(test,cfg),cfg).length===0){a.start=c.start;a.end=c.end;break}}}}
+function formatAssignment(a,cfg){return `${displayHour(a.start,cfg.last)}〜${displayHour(a.end,cfg.last)} NP`}
+const AUTO_MEMORY_KEY='shiftManagerAutoConfigV12';
+const TEST_NAMES_KEY='shiftManagerTestNamesV12';
+function loadAutoMemory(){try{return JSON.parse(localStorage.getItem(AUTO_MEMORY_KEY)||'{}')||{}}catch(e){return {}}}
+function saveAutoMemory(configs){
+  const mem=loadAutoMemory();
+  configs.forEach(cfg=>{const dow=parseDate(cfg.date).getDay();mem['dow'+dow]={open:cfg.open,last:cfg.last,minOpen:cfg.minOpen,minNight:cfg.minNight,minAfter:cfg.minAfter,fixed1:cfg.fixed1||'',fixed2:cfg.fixed2||''};});
+  mem.flexStaff=$('autoFlexStaff')?.value||'';mem.flexOffDays=Math.max(0,Math.min(6,Number($('autoFlexOffDays')?.value||1)));
+  localStorage.setItem(AUTO_MEMORY_KEY,JSON.stringify(mem));
+}
+function rememberedDayConfig(date){
+  const base=defaultDayConfig(date),mem=loadAutoMemory(),saved=mem['dow'+parseDate(date).getDay()];
+  return saved?{...base,...saved,date}:base;
+}
+function getTestNames(){
+  try{const a=JSON.parse(localStorage.getItem(TEST_NAMES_KEY)||'[]');if(Array.isArray(a)&&a.length===10)return a.map((x,i)=>String(x||`TEST-${i+1}`).trim()||`TEST-${i+1}`)}catch(e){}
+  return Array.from({length:10},(_,i)=>`TEST-${i+1}`);
+}
+function defaultDayConfig(date){const d=parseDate(date),weekend=d.getDay()===5||d.getDay()===6;return {date,open:18,last:weekend?35:33,minOpen:2,minNight:3,minAfter:weekend?4:2,fixed1:'',fixed2:''}}
+function eventForDate(date){return events.find(e=>e.date===date&&!String(e.name||'').startsWith('__'))}
+function renderAutoConfig(){
+  const days=Array.from({length:7},(_,i)=>fmt(addDays(requestWeekStart,i)));
+  const staffOpts='<option value="">指定なし</option>'+staff.filter(s=>s.active!==false).map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+  $('autoDays').innerHTML=days.map(date=>{const cfg=rememberedDayConfig(date),d=parseDate(date),ev=eventForDate(date),opts=staffOpts;return `<div class="auto-day" data-auto-date="${date}"><div class="auto-day-head"><b>${d.getMonth()+1}/${d.getDate()}（${'日月火水木金土'[d.getDay()]}）</b><small>${ev?esc(ev.name):''}</small></div><div class="auto-grid"><div class="auto-field"><label>OPEN</label><input class="auto-open" type="number" value="${cfg.open}" min="12" max="24"></div><div class="auto-field"><label>LAST</label><select class="auto-last"><option value="33" ${cfg.last===33?'selected':''}>9:00</option><option value="34">10:00</option><option value="35" ${cfg.last===35?'selected':''}>11:00</option><option value="36">12:00</option></select></div><div class="auto-field"><label>OPEN〜23 最低</label><div class="auto-num"><button type="button" data-step="-1">−</button><input class="auto-min-open" type="number" value="${cfg.minOpen}" min="0"><button type="button" data-step="1">＋</button></div></div><div class="auto-field"><label>23〜5 最低</label><div class="auto-num"><button type="button" data-step="-1">−</button><input class="auto-min-night" type="number" value="${cfg.minNight}" min="0"><button type="button" data-step="1">＋</button></div></div><div class="auto-field auto-wide"><label>5〜LAST 最低</label><div class="auto-num"><button type="button" data-step="-1">−</button><input class="auto-min-after" type="number" value="${cfg.minAfter}" min="0"><button type="button" data-step="1">＋</button></div></div><div class="auto-field"><label>必ずOPEN ①</label><select class="auto-fixed1">${opts}</select></div><div class="auto-field"><label>必ずOPEN ②</label><select class="auto-fixed2">${opts}</select></div></div></div>`}).join('');
+  document.querySelectorAll('#autoDays .auto-day').forEach(el=>{
+    const cfg=rememberedDayConfig(el.dataset.autoDate);
+    const f1=el.querySelector('.auto-fixed1'),f2=el.querySelector('.auto-fixed2');
+    if(f1&&cfg.fixed1&&[...f1.options].some(o=>String(o.value)===String(cfg.fixed1)))f1.value=cfg.fixed1;
+    if(f2&&cfg.fixed2&&[...f2.options].some(o=>String(o.value)===String(cfg.fixed2)))f2.value=cfg.fixed2;
+  });
+  if($('autoFlexStaff')) {
+    $('autoFlexStaff').innerHTML=staffOpts;
+    const mem=loadAutoMemory();
+    if(mem.flexStaff && [...$('autoFlexStaff').options].some(o=>String(o.value)===String(mem.flexStaff))) $('autoFlexStaff').value=mem.flexStaff;
+    if(mem.flexOffDays!=null) $('autoFlexOffDays').value=mem.flexOffDays;
+  }
+  document.querySelectorAll('#autoDays [data-step]').forEach(btn=>btn.onclick=()=>{const input=btn.parentElement.querySelector('input');input.value=Math.max(0,Number(input.value||0)+Number(btn.dataset.step))});
+}
+function readAutoConfigs(){return [...document.querySelectorAll('.auto-day')].map(el=>({date:el.dataset.autoDate,open:Number(el.querySelector('.auto-open').value||18),last:Number(el.querySelector('.auto-last').value||33),minOpen:Number(el.querySelector('.auto-min-open').value||0),minNight:Number(el.querySelector('.auto-min-night').value||0),minAfter:Number(el.querySelector('.auto-min-after').value||0),fixed1:el.querySelector('.auto-fixed1').value,fixed2:el.querySelector('.auto-fixed2').value}))}
+async function createAutoDraft(){if(!isAdmin())return;const approved=requests.filter(r=>isInRequestWeek(r)&&r.status==='approved'&&requestStaff(r));if(!approved.length)return alert('この週に承認済みの希望シフトがありません。');renderAutoConfig();show('autoConfigModal')}
+async function runAutoSchedule(){
+  if(!isAdmin())return;
+  const configs=readAutoConfigs();
+  saveAutoMemory(configs);
+  const allAssignments=[],warnings=[];
+  const flexStaffId=$('autoFlexStaff')?.value||'';
+  const flexOffDays=Math.max(0,Math.min(6,Number($('autoFlexOffDays')?.value||1)));
+  const flexMaxDays=7-flexOffDays;
+  const flexAssignedDates=new Set();
+
+  // 休み自由スタッフの「通常勤務時間」は、その週で最も多い出勤希望時間を使う。
+  let flexBase=null;
+  if(flexStaffId){
+    const counts=new Map();
+    for(const r of requests.filter(r=>isInRequestWeek(r)&&r.status==='approved'&&String(requestStaff(r)?.id)===String(flexStaffId)&&r.request_type!=='off')){
+      const cfg=configs.find(c=>c.date===r.date)||defaultDayConfig(r.date);
+      const av=requestAvailability(r,cfg); if(!av)continue;
+      const key=`${av.start}-${av.end}`;
+      const x=counts.get(key)||{count:0,av};x.count++;counts.set(key,x);
+    }
+    flexBase=[...counts.values()].sort((a,b)=>b.count-a.count)[0]?.av||null;
+    if(!flexBase)warnings.push('休み自動調整スタッフの通常勤務時間を判定できませんでした。');
+  }
+
+  // 金→土を最優先。その後は希望を出している人数が少ない日から処理。
+  const candidateCount=(cfg)=>requests.filter(r=>r.date===cfg.date&&r.status==='approved'&&requestStaff(r)&&r.request_type!=='off').length;
+  const priority=(cfg)=>{const d=parseDate(cfg.date).getDay();if(d===5)return 0;if(d===6)return 1;return 10+candidateCount(cfg)};
+  const ordered=configs.slice().sort((a,b)=>priority(a)-priority(b)||a.date.localeCompare(b.date));
+
+  for(const cfg of ordered){
+    const people=[];
+    const dayReqs=requests.filter(r=>r.date===cfg.date&&r.status==='approved'&&requestStaff(r));
+    for(const r of dayReqs){
+      const st=requestStaff(r); let av=requestAvailability(r,cfg);
+      if(String(st?.id)===String(flexStaffId)&&flexBase){
+        // この人だけは「休み」提出日でも、週内の休み曜日を移動できる。
+        av={start:Math.max(cfg.open,flexBase.start),end:Math.min(cfg.last,flexBase.end)};
+        if(av.end<=av.start)av=null;
+      }
+      if(st&&av)people.push({staff:st,request:r,av,candidates:candidateTemplates(av,cfg),flex:String(st.id)===String(flexStaffId)});
+    }
+    // 休み自由スタッフがその日に希望自体を出していなくても候補にできる。
+    if(flexStaffId&&flexBase&&!people.some(p=>String(p.staff.id)===String(flexStaffId))){
+      const st=staff.find(x=>String(x.id)===String(flexStaffId));
+      if(st){const av={start:Math.max(cfg.open,flexBase.start),end:Math.min(cfg.last,flexBase.end)};if(av.end>av.start)people.push({staff:st,request:null,av,candidates:candidateTemplates(av,cfg),flex:true});}
+    }
+    const as=[];
+    const flexCanWork=()=>!flexStaffId||flexAssignedDates.has(cfg.date)||flexAssignedDates.size<flexMaxDays;
+
+    for(const id of [cfg.fixed1,cfg.fixed2].filter(Boolean)){
+      if(as.some(a=>String(a.staff.id)===String(id)))continue;
+      const p=people.find(x=>String(x.staff.id)===String(id));
+      if(!p){warnings.push(`${cfg.date}: 固定OPENスタッフが勤務可能ではありません`);continue;}
+      if(p.flex&&!flexCanWork()){warnings.push(`${cfg.date}: ${p.staff.name} は週${flexOffDays}日休み条件のため固定OPENにできません`);continue;}
+      const c=p.candidates.find(x=>x.start===cfg.open);
+      if(!c){warnings.push(`${cfg.date}: ${p.staff.name} はOPENから勤務不可`);continue;}
+      as.push({...c,staff:p.staff,request:p.request,fixed:true,flex:p.flex});
+      if(p.flex)flexAssignedDates.add(cfg.date);
+    }
+
+    let guard=0;
+    while(deficits(coverageForAssignments(as,cfg),cfg).length&&guard++<50){
+      const eligible=people.filter(p=>!p.flex||flexCanWork());
+      const best=chooseBestCandidate(eligible,as,cfg);
+      if(!best)break;
+      const src=people.find(p=>String(p.staff.id)===String(best.staff.id));
+      best.flex=!!src?.flex;
+      as.push(best);
+      if(best.flex)flexAssignedDates.add(cfg.date);
+    }
+
+    const rem=deficits(coverageForAssignments(as,cfg),cfg);
+    if(rem.length){let groups=[],cur=null;for(const x of rem){if(!cur||x.h!==cur.end||x.d!==cur.d){cur={start:x.h,end:x.h+1,d:x.d};groups.push(cur)}else cur.end=x.h+1}groups.forEach(g=>warnings.push(`${cfg.date}: ${displayHour(g.start,cfg.last)}〜${displayHour(g.end,cfg.last)} ${g.d}人不足`));}
+    as.forEach(a=>allAssignments.push({cfg,...a}));
+  }
+
+  if(!allAssignments.length)return alert('条件に合うシフトを作成できませんでした。');
+  if(flexStaffId){
+    const st=staff.find(x=>String(x.id)===String(flexStaffId));
+    const offDates=configs.map(c=>c.date).filter(d=>!flexAssignedDates.has(d));
+    warnings.unshift(`${st?.name||'休み自動調整スタッフ'}：休み ${offDates.length?offDates.map(d=>`${parseDate(d).getMonth()+1}/${parseDate(d).getDate()}`).join('・'):'なし'}`);
+  }
+  if(!confirm(`${allAssignments.length}件のNPシフト案を作成します。${warnings.length?`\n不足・確認事項 ${warnings.length}件あり`:''}`))return;
+
+  // 前回のNP自動生成結果が残らないよう、この週のNPシフトだけ一度消してから保存。
+  const weekEnd=fmt(addDays(requestWeekStart,6));
+  const clear=await supabaseClient.from('shifts').delete().gte('date',fmt(requestWeekStart)).lte('date',weekEnd).like('display_text','% NP');
+  if(clear.error)return alert('前回シフトの整理に失敗しました: '+clear.error.message);
+  for(const a of allAssignments){
+    const row={staff_id:a.staff.id,date:a.cfg.date,display_text:formatAssignment(a,a.cfg),role:a.fixed?'OPEN':''};
+    const ins=await supabaseClient.from('shifts').insert(row);
+    if(ins.error)return alert('シフト保存に失敗しました: '+ins.error.message);
+  }
+  hide('autoConfigModal');weekStart=new Date(requestWeekStart);dayCursor=new Date(requestWeekStart);await loadAll();document.querySelector('[data-tab="day"]').click();
+  alert(warnings.length?'シフト案を作成しました。\n\n'+warnings.slice(0,20).join('\n'):'必要人数を満たすシフト案を作成しました。');
+}
+async function approveAndCreateDraft(){if(!isAdmin())return;const pending=requests.filter(r=>isInRequestWeek(r)&&r.status==='pending');if(pending.length){if(!confirm(`この週の未処理 ${pending.length}件をすべて承認して、自動シフト設定へ進みますか？`))return;const {error}=await supabaseClient.from('shift_requests').update({status:'approved'}).in('id',pending.map(r=>r.id));if(error)return alert(error.message);await loadAll()}await createAutoDraft()}
+
+function consecutiveLabel(rows){
+  if(rows.length===1){
+    const d=parseDate(rows[0].date),dow='日月火水木金土'[d.getDay()];
+    return `${d.getMonth()+1}/${d.getDate()}（${dow}）`;
+  }
+  const first=parseDate(rows[0].date),last=parseDate(rows[rows.length-1].date);
+  return `${first.getMonth()+1}/${first.getDate()}〜${last.getMonth()+1}/${last.getDate()}（${rows.length}日）`;
+}
+
+function groupRequestsByPersonAndRun(rows){
+  const byPerson=new Map();
+  rows.forEach(r=>{
+    const key=requestStaff(r)?.id||r.user_email||r.user_id;
+    if(!byPerson.has(key))byPerson.set(key,[]);
+    byPerson.get(key).push(r);
+  });
+
+  const people=[];
+  for(const [key,list] of byPerson){
+    list.sort((a,b)=>a.date.localeCompare(b.date));
+    const groups=[];
+    for(const r of list){
+      const meta=requestMeta(r.memo);
+      const sig=[r.request_type,requestToShiftText(r),meta.moveOk?'MOVE':'',r.status,meta.memo].join('|');
+      const last=groups[groups.length-1];
+      const prev=last?.rows[last.rows.length-1];
+      const consecutive=prev&&fmt(addDays(parseDate(prev.date),1))===r.date;
+      if(last&&last.sig===sig&&consecutive)last.rows.push(r);
+      else groups.push({sig,rows:[r]});
+    }
+    people.push({key,rows:list,groups,who:requestWho(list[0]),linked:!!requestStaff(list[0])});
+  }
+  return people.sort((a,b)=>a.who.localeCompare(b.who));
+}
+
+window.setReqGroupStatus=async(ids,status)=>{
+  if(!ids.length)return;
+  const {error}=await supabaseClient.from('shift_requests').update({status}).in('id',ids);
+  if(error)return alert(error.message);
+  await loadAll();
+};
+
+function renderRequests(){
+  $('reqWeekLabel').textContent=`${requestWeekStart.getMonth()+1}/${requestWeekStart.getDate()}〜${reqWeekEnd().getMonth()+1}/${reqWeekEnd().getDate()}`;
+  let visible=requests.filter(r=>isInRequestWeek(r));
+  if(!isAdmin())visible=visible.filter(r=>r.user_id===currentUser.id);
+
+  const pending=visible.filter(x=>x.status==='pending').length;
+  const approved=visible.filter(x=>x.status==='approved').length;
+  const total=visible.length;
+  $('requestStats').innerHTML=`<div class="req-stat"><b>${total}</b><small>提出</small></div><div class="req-stat"><b>${pending}</b><small>未処理</small></div><div class="req-stat"><b>${approved}</b><small>承認済</small></div>`;
+
+  if(!visible.length){
+    $('requestList').innerHTML='<div class="notice">この週の希望提出はまだありません。</div>';
+    return;
+  }
+
+  const people=groupRequestsByPersonAndRun(visible);
+  $('requestList').innerHTML=people.map(p=>{
+    const email=p.rows[0]?.user_email||'';
+    const head=`<div class="req-person-head"><div><b>${esc(p.who)}</b>${isAdmin()&&email&&p.who!==email?`<small>${esc(email)}</small>`:''}${isAdmin()&&!p.linked?`<div class="link-warning">古い希望データ：スタッフ未紐付けです。スタッフ名を選んで再提出すると自動シフトに使えます。</div>`:''}</div><span class="badge">${p.rows.length}日</span></div>`;
+
+    const groups=p.groups.map(g=>{
+      const r=g.rows[0],meta=requestMeta(r.memo),shift=requestToShiftText(r);
+      let acts='';
+      const ids=g.rows.map(x=>x.id);
+      const jsonIds=encodeURIComponent(JSON.stringify(ids));
+      if(isAdmin()){
+        if(r.status==='pending'){
+          acts=`<button class="btn green small" onclick="setReqGroupStatus(JSON.parse(decodeURIComponent('${jsonIds}')),'approved')">まとめて承認</button><button class="btn danger small" onclick="setReqGroupStatus(JSON.parse(decodeURIComponent('${jsonIds}')),'rejected')">まとめて却下</button>`;
+        }else{
+          acts=`<button class="btn secondary small" onclick="setReqGroupStatus(JSON.parse(decodeURIComponent('${jsonIds}')),'pending')">未処理に戻す</button>`;
+        }
+      }else if(r.status==='pending'){
+        acts=g.rows.map(x=>`<button class="btn danger small" onclick="deleteRequest('${x.id}')">${consecutiveLabel([x])} 削除</button>`).join('');
+      }
+      return `<div class="req-group"><div class="req-group-top"><div class="req-group-main"><b><span class="req-days">${esc(consecutiveLabel(g.rows))}</span>　${esc(shift)}</b><small>${esc(requestLabel(r.request_type))}${meta.moveOk?' / 移動OK':''}${meta.memo?' / '+esc(meta.memo):''}</small></div><span class="badge ${statusClass(r.status)}">${esc(statusLabel(r.status))}</span></div>${acts?`<div class="item-actions" style="margin-top:9px">${acts}</div>`:''}</div>`;
+    }).join('');
+
+    return `<div class="req-person">${head}${groups}</div>`;
+  }).join('');
+}
+
+window.setReqStatus=async(id,status)=>{const {error}=await supabaseClient.from('shift_requests').update({status}).eq('id',id);if(error)return alert(error.message);await loadAll()};
+window.deleteRequest=async(id)=>{if(!confirm('この希望を削除しますか？'))return;const {error}=await supabaseClient.from('shift_requests').delete().eq('id',id);if(error)return alert(error.message);await loadAll()};
+
+
+$('prevDay').onclick=()=>{dayCursor=addDays(dayCursor,-1);renderDay()};
+$('nextDay').onclick=()=>{dayCursor=addDays(dayCursor,1);renderDay()};
+$('todayDay').onclick=()=>{dayCursor=new Date();dayCursor.setHours(0,0,0,0);renderDay()};
+
+$('newRequestBtn').onclick=()=>{
+  // 希望タブで表示中の週の月曜日を必ず初期日付にする（端末日付/UTCズレ防止）
+  resetRequestModal(fmt(requestWeekStart));show('requestModal');
+};
+$('saveRequestBtn').onclick=()=>saveRequest(false);
+$('saveNextRequestBtn').onclick=()=>saveRequest(true);
+$('autoDraftBtn').onclick=createAutoDraft;
+$('approveAndDraftBtn').onclick=approveAndCreateDraft;
+$('runAutoScheduleBtn').onclick=runAutoSchedule;
+$('approveAllBtn').onclick=approveAllThisWeek;
+$('prevReqWeek').onclick=()=>{requestWeekStart=addDays(requestWeekStart,-7);renderRequests()};
+$('nextReqWeek').onclick=()=>{requestWeekStart=addDays(requestWeekStart,7);renderRequests()};
+$('todayReqWeek').onclick=()=>{requestWeekStart=getMonday(new Date());renderRequests()};
+
+
+async function seedTenPersonTest(){
+  if(!isAdmin())return;
+  const start='2026-09-14', end='2026-09-20';
+  if(!confirm('9/14〜9/20の希望データを一度消して、保存したテスト10人の希望を自動入力します。\n\nスタッフ本体は消しません。進めますか？'))return;
+
+  const names=getTestNames();
+  const byName={};
+  staff.forEach(s=>{ if(names.includes(s.name)&&!byName[s.name]) byName[s.name]=s; });
+  let sort=staff.reduce((m,s)=>Math.max(m,Number(s.sort_order)||0),0);
+  for(const name of names){
+    if(byName[name])continue;
+    const row={name,email:null,active:true,sort_order:++sort};
+    const {data,error}=await supabaseClient.from('staff').insert(row).select().single();
+    if(error)return alert('スタッフ追加エラー: '+error.message);
+    byName[name]=data;
+  }
+
+  // その週の希望だけをクリーンにする（古い未紐付け希望も除去）
+  let q=supabaseClient.from('shift_requests').delete().gte('date',start).lte('date',end);
+  let {error}=await q;
+  if(error)return alert('古い希望の整理に失敗しました: '+error.message);
+
+  const plan={
+    [names[0]]:['23〜L','休み','23〜L','23〜L','24〜L','24〜L','24〜L'],
+    [names[1]]:['休み','休み','休み','休み','21〜5','休み','休み'],
+    [names[2]]:['18〜23','18〜5','休み','18〜5','18〜5','18〜5','18〜5'],
+    [names[3]]:['休み','休み','休み','休み','24〜L','休み','休み'],
+    [names[4]]:['休み','休み','休み','休み','休み','24〜8','休み'],
+    [names[5]]:['18〜5','18〜5','18〜5','18〜5','休み','休み','18〜5'],
+    [names[6]]:['休み','休み','24〜L','休み','24〜L','休み','休み'],
+    [names[7]]:['休み','24〜8','休み','休み','休み','24〜8','休み'],
+    [names[8]]:['18〜5','休み','18〜5','18〜5','18〜5','18〜5','18〜5'],
+    [names[9]]:['休み','24〜L','休み','24〜L','24〜L','24〜L','24〜L']
+  };
+  const parse={
+    '18〜23':['18:00','23:00'],'18〜5':['18:00','05:00'],'18〜6':['18:00','06:00'],
+    '21〜5':['21:00','05:00'],'24〜6':['24:00','06:00'],'23〜L':['23:00','LAST'],
+    '24〜L':['24:00','LAST'],'24〜8':['24:00','08:00'],'18〜L':['18:00','LAST']
+  };
+  const dates=['2026-09-14','2026-09-15','2026-09-16','2026-09-17','2026-09-18','2026-09-19','2026-09-20'];
+  const rows=[];
+  for(const name of names){
+    const sid=byName[name].id;
+    plan[name].forEach((v,i)=>{
+      const off=v==='休み', t=off?[null,null]:parse[v];
+      rows.push({
+        user_id:currentUser.id,user_email:currentUser.email||null,date:dates[i],
+        request_type:off?'off':'prefer',start_text:off?null:t[0],end_text:off?null:t[1],
+        memo:encodeRequestMemo([],`TESTデータ / ${name}`,sid,false),status:'approved'
+      });
+    });
+  }
+  ({error}=await supabaseClient.from('shift_requests').insert(rows));
+  if(error)return alert('テスト希望の登録エラー: '+error.message);
+
+  requestWeekStart=parseDate(start);
+  weekStart=parseDate(start);
+  await loadAll();
+  renderRequests();
+  alert('テスト10人の希望を9/14〜9/20に入力しました。\n\n自動シフト設定は前回の内容を記憶しています。必要なら確認して、そのまま自動作成してください。');
+}
+function openTestNamesModal(){
+  const names=getTestNames();
+  $('testNameFields').innerHTML=names.map((name,i)=>`<div class="field"><label>${i+1}人目</label><input class="test-name-input" data-i="${i}" value="${esc(name)}" placeholder="スタッフ名"></div>`).join('');
+  show('testNamesModal');
+}
+$('testNamesBtn').onclick=openTestNamesModal;
+$('saveTestNamesBtn').onclick=async()=>{
+  const oldNames=getTestNames();
+  const vals=[...document.querySelectorAll('.test-name-input')].map((x,i)=>x.value.trim()||`TEST-${i+1}`);
+  if(new Set(vals.map(x=>x.toLowerCase())).size!==10)return alert('同じ名前は使えません。10人それぞれ別の名前にしてください。');
+  for(let i=0;i<10;i++){
+    if(oldNames[i]===vals[i])continue;
+    const st=staff.find(x=>x.name===oldNames[i])||staff.find(x=>x.name===`TEST-${i+1}`);
+    if(st){const {error}=await supabaseClient.from('staff').update({name:vals[i]}).eq('id',st.id);if(error)return alert('名前変更エラー: '+error.message);}
+  }
+  localStorage.setItem(TEST_NAMES_KEY,JSON.stringify(vals));
+  await loadAll();hide('testNamesModal');alert('テストスタッフ名を変更して保存しました。次回からこの名前を使います。');
+};
+$('seedTestBtn').onclick=seedTenPersonTest;
+
+function renderMonth(){
+  $('monthLabel').textContent=`${monthCursor.getFullYear()}年${monthCursor.getMonth()+1}月`;
+  let html='<div class="month-grid">';
+  '月火水木金土日'.split('').forEach((x,i)=>html+=`<div class="month-head ${i===5?'sat':i===6?'sun':''}">${x}</div>`);
+  const first=new Date(monthCursor.getFullYear(),monthCursor.getMonth(),1);
+  const start=getMonday(first);
+  for(let i=0;i<42;i++){
+    const d=addDays(start,i),inMonth=d.getMonth()===monthCursor.getMonth(),cls=d.getDay()===6?'sat':d.getDay()===0?'sun':'';
+    const dayShifts=shifts.filter(x=>x.date===fmt(d)).map(x=>({x,s:staff.find(s=>s.id===x.staff_id)}));
+    html+=`<div class="month-cell ${cls}" style="${inMonth?'':'opacity:.35'}"><div class="daynum">${d.getDate()}</div><div class="month-shift">${dayShifts.slice(0,5).map(o=>`<b>${esc(o.s?.name||'')} ${esc(o.x.display_text||'')}</b>`).join('')}${dayShifts.length>5?`<small>+${dayShifts.length-5}名</small>`:''}</div></div>`;
+  }
+  html+='</div>';$('monthGrid').innerHTML=html;
+}
+$('prevMonth').onclick=()=>{monthCursor=new Date(monthCursor.getFullYear(),monthCursor.getMonth()-1,1);renderMonth()};
+$('nextMonth').onclick=()=>{monthCursor=new Date(monthCursor.getFullYear(),monthCursor.getMonth()+1,1);renderMonth()};
+
+$('eventBtn').onclick=()=>{$('eventDate').value=fmt(new Date());show('eventModal')};
+$('saveEventBtn').onclick=async()=>{
+  const row={date:$('eventDate').value,name:$('eventName').value.trim(),time_text:$('eventTime').value.trim()};
+  const existing=events.find(x=>x.date===row.date&&x.name!=='__SHIFT_MANAGER_MANAGERS__');
+  const q=existing?supabaseClient.from('events').update(row).eq('id',existing.id):supabaseClient.from('events').insert(row);
+  const {error}=await q;if(error)return alert(error.message);hide('eventModal');await loadAll();
+};
+
+function weekFromDate(d){return getMonday(d)}
+function buildLineText(start){
+  const days=[...Array(7)].map((_,i)=>addDays(start,i));
+  let out=`【${days[0].getMonth()+1}/${days[0].getDate()}〜${days[6].getMonth()+1}/${days[6].getDate()} SHIFT】\n`;
+  days.forEach(d=>{
+    out+=`\n■ ${d.getMonth()+1}/${d.getDate()} ${'日月火水木金土'[d.getDay()]}\n`;
+    const e=events.find(x=>x.date===fmt(d)&&x.name!=='__SHIFT_MANAGER_MANAGERS__');if(e)out+=`EVENT: ${e.name}${e.time_text?' '+e.time_text:''}\n`;
+    staff.filter(s=>s.active!==false).forEach(s=>{
+      const sh=shifts.find(x=>x.staff_id===s.id&&x.date===fmt(d));if(sh?.display_text)out+=`${s.name}　${sh.display_text}${sh.role?' ('+sh.role+')':''}\n`;
+    });
+  });
+  return out.trim();
+}
+function renderLine(){
+  if(!$('shareWeekDate').value)$('shareWeekDate').value=fmt(weekStart);
+  $('linePreview').textContent=buildLineText(weekFromDate(parseDate($('shareWeekDate').value)));
+}
+$('shareWeekDate').onchange=renderLine;
+$('copyLineBtn').onclick=async()=>{
+  const text=$('linePreview').textContent;
+  try{await navigator.clipboard.writeText(text);alert('コピーしました');}
+  catch{prompt('コピーしてください',text)}
+};
+
+document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>hide(b.dataset.close));
+document.querySelectorAll('.modal-bg').forEach(el=>el.addEventListener('click',e=>{if(e.target===el)hide(el.id)}));
+
+boot();
+
+document.addEventListener('click',(e)=>{
+  const add=e.target.closest('#addStaffBtn');
+  if(add&&isAdmin()){
+    $('staffName').value='';
+    $('staffEmail').value='';
+    $('staffManager').checked=false;
+    show('staffModal');
+  }
+  const manage=e.target.closest('#manageStaffBtn');
+  if(manage&&isAdmin()){
+    renderStaffManagement();
+    show('manageStaffModal');
+  }
+});
+
+</script>
+</body>
+</html>
