@@ -198,7 +198,7 @@ thead th:first-child{z-index:10}
     <div style="display:flex;align-items:center;gap:8px">
       <div>
         <h1>SHIFT MANAGER</h1>
-        <div class="sub" id="storeTitle">共有シフト管理 V12.5 SERVER MEMORY</div>
+        <div class="sub" id="storeTitle">共有シフト管理 V12.6 MEMORY FIX</div>
       </div>
       <div class="topright">
         <span class="role-pill" id="rolePill"></span>
@@ -884,7 +884,7 @@ function loadAutoMemory(){
   if(meta?.time_text){
     try{
       const server=JSON.parse(meta.time_text)||{};
-      if(server&&typeof server==='object')return {...local,...server};
+      if(server&&typeof server==='object')return {...server,...local};
     }catch(e){console.warn('auto memory server parse',e)}
   }
   return local;
@@ -945,6 +945,7 @@ function renderAutoConfig(){
 }
 function readAutoConfigs(){return [...document.querySelectorAll('.auto-day')].map(el=>({date:el.dataset.autoDate,open:Number(el.querySelector('.auto-open').value||18),last:Number(el.querySelector('.auto-last').value||33),minOpen:Number(el.querySelector('.auto-min-open').value||0),minNight:Number(el.querySelector('.auto-min-night').value||0),minAfter:Number(el.querySelector('.auto-min-after').value||0),fixed1:el.querySelector('.auto-fixed1').value,fixed2:el.querySelector('.auto-fixed2').value}))}
 function autoSaveCurrentConfig(){try{const cfgs=readAutoConfigs();if(!cfgs.length)return;saveAutoMemory(cfgs);const st=$('autoMemoryStatus');if(st){st.textContent='✓ 設定を保存しました';clearTimeout(window.__autoMemTimer);window.__autoMemTimer=setTimeout(()=>{if(st)st.textContent='変更内容は自動保存されます'},1200)}}catch(e){console.error('auto memory save',e)}}
+function flushAutoMemory(){try{const cfgs=readAutoConfigs();if(cfgs.length){saveAutoMemory(cfgs);persistAutoMemory(window.__autoMemoryPending||loadAutoMemory());}}catch(e){console.error('auto memory flush',e)}}
 async function createAutoDraft(){if(!isAdmin())return;const approved=requests.filter(r=>isInRequestWeek(r)&&r.status==='approved'&&requestStaff(r));if(!approved.length)return alert('この週に承認済みの希望シフトがありません。');renderAutoConfig();show('autoConfigModal')}
 async function runAutoSchedule(){
   if(!isAdmin())return;
@@ -1299,6 +1300,8 @@ document.addEventListener('click',(e)=>{
   }
 });
 
+
+document.addEventListener('click',e=>{const b=e.target.closest('[data-close="autoConfigModal"]');if(b)flushAutoMemory();});
 </script>
 </body>
 </html>
