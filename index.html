@@ -198,7 +198,7 @@ thead th:first-child{z-index:10}
     <div style="display:flex;align-items:center;gap:8px">
       <div>
         <h1>SHIFT MANAGER</h1>
-        <div class="sub" id="storeTitle">共有シフト管理 V12.4 AUTO FIX</div>
+        <div class="sub" id="storeTitle">共有シフト管理 V12.5 SERVER MEMORY</div>
       </div>
       <div class="topright">
         <span class="role-pill" id="rolePill"></span>
@@ -874,13 +874,45 @@ function chooseBestCandidate(people,as,cfg){const cov=coverageForAssignments(as,
 function optimizeAssignments(as,people,cfg){for(const a of as.filter(x=>!x.fixed)){const p=people.find(x=>x.staff.id===a.staff.id);if(!p)continue;for(const c of p.candidates.slice().sort((x,y)=>(x.end-x.start)-(y.end-y.start))){const test=as.map(x=>x===a?{...a,start:c.start,end:c.end}:x);if(deficits(coverageForAssignments(test,cfg),cfg).length===0){a.start=c.start;a.end=c.end;break}}}}
 function formatAssignment(a,cfg){return `${displayHour(a.start,cfg.last)}〜${displayHour(a.end,cfg.last)} NP`}
 const AUTO_MEMORY_KEY='shiftManagerAutoConfigV12';
+const AUTO_MEMORY_EVENT='__SHIFT_MANAGER_AUTO_CONFIG__';
 const TEST_NAMES_KEY='shiftManagerTestNamesV12';
-function loadAutoMemory(){try{return JSON.parse(localStorage.getItem(AUTO_MEMORY_KEY)||'{}')||{}}catch(e){return {}}}
+function autoMemoryMetaEvent(){return events.find(e=>e.name===AUTO_MEMORY_EVENT)}
+function loadAutoMemory(){
+  let local={};
+  try{local=JSON.parse(localStorage.getItem(AUTO_MEMORY_KEY)||'{}')||{}}catch(e){}
+  const meta=autoMemoryMetaEvent();
+  if(meta?.time_text){
+    try{
+      const server=JSON.parse(meta.time_text)||{};
+      if(server&&typeof server==='object')return {...local,...server};
+    }catch(e){console.warn('auto memory server parse',e)}
+  }
+  return local;
+}
+async function persistAutoMemory(mem){
+  localStorage.setItem(AUTO_MEMORY_KEY,JSON.stringify(mem));
+  if(!supabaseClient||!currentUser)return;
+  try{
+    const existing=autoMemoryMetaEvent();
+    const row={date:'2099-01-02',name:AUTO_MEMORY_EVENT,time_text:JSON.stringify(mem)};
+    const {data,error}=existing
+      ? await supabaseClient.from('events').update(row).eq('id',existing.id).select('*').single()
+      : await supabaseClient.from('events').insert(row).select('*').single();
+    if(error)throw error;
+    if(data){
+      const i=events.findIndex(e=>e.name===AUTO_MEMORY_EVENT);
+      if(i>=0)events[i]=data; else events.push(data);
+    }
+  }catch(e){console.error('server auto memory save',e)}
+}
 function saveAutoMemory(configs){
   const mem=loadAutoMemory();
   configs.forEach(cfg=>{const dow=parseDate(cfg.date).getDay();mem['dow'+dow]={open:cfg.open,last:cfg.last,minOpen:cfg.minOpen,minNight:cfg.minNight,minAfter:cfg.minAfter,fixed1:cfg.fixed1||'',fixed2:cfg.fixed2||''};});
   mem.flexStaff=$('autoFlexStaff')?.value||'';mem.flexOffDays=Math.max(0,Math.min(6,Number($('autoFlexOffDays')?.value||1)));
+  window.__autoMemoryPending=mem;
   localStorage.setItem(AUTO_MEMORY_KEY,JSON.stringify(mem));
+  clearTimeout(window.__autoServerTimer);
+  window.__autoServerTimer=setTimeout(()=>persistAutoMemory(window.__autoMemoryPending||mem),500);
 }
 function rememberedDayConfig(date){
   const base=defaultDayConfig(date),mem=loadAutoMemory(),saved=mem['dow'+parseDate(date).getDay()];
@@ -1218,7 +1250,7 @@ $('nextMonth').onclick=()=>{monthCursor=new Date(monthCursor.getFullYear(),month
 $('eventBtn').onclick=()=>{$('eventDate').value=fmt(new Date());show('eventModal')};
 $('saveEventBtn').onclick=async()=>{
   const row={date:$('eventDate').value,name:$('eventName').value.trim(),time_text:$('eventTime').value.trim()};
-  const existing=events.find(x=>x.date===row.date&&x.name!=='__SHIFT_MANAGER_MANAGERS__');
+  const existing=events.find(x=>x.date===row.date&&!String(x.name||'').startsWith('__SHIFT_MANAGER_'));
   const q=existing?supabaseClient.from('events').update(row).eq('id',existing.id):supabaseClient.from('events').insert(row);
   const {error}=await q;if(error)return alert(error.message);hide('eventModal');await loadAll();
 };
@@ -1229,7 +1261,7 @@ function buildLineText(start){
   let out=`【${days[0].getMonth()+1}/${days[0].getDate()}〜${days[6].getMonth()+1}/${days[6].getDate()} SHIFT】\n`;
   days.forEach(d=>{
     out+=`\n■ ${d.getMonth()+1}/${d.getDate()} ${'日月火水木金土'[d.getDay()]}\n`;
-    const e=events.find(x=>x.date===fmt(d)&&x.name!=='__SHIFT_MANAGER_MANAGERS__');if(e)out+=`EVENT: ${e.name}${e.time_text?' '+e.time_text:''}\n`;
+    const e=events.find(x=>x.date===fmt(d)&&!String(x.name||'').startsWith('__SHIFT_MANAGER_'));if(e)out+=`EVENT: ${e.name}${e.time_text?' '+e.time_text:''}\n`;
     staff.filter(s=>s.active!==false).forEach(s=>{
       const sh=shifts.find(x=>x.staff_id===s.id&&x.date===fmt(d));if(sh?.display_text)out+=`${s.name}　${sh.display_text}${sh.role?' ('+sh.role+')':''}\n`;
     });
