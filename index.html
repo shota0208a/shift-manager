@@ -111,6 +111,24 @@ thead th:first-child{z-index:10}
 .draft-box b{display:block;margin-bottom:4px}
 .draft-box small{color:var(--muted);line-height:1.5}
 .req-dashboard{padding:12px 14px;border-bottom:1px solid var(--line);background:#fff}
+.req-board-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;padding:12px 0 4px}
+.req-board{border-collapse:separate;border-spacing:0;min-width:760px;width:100%;font-size:13px}
+.req-board th,.req-board td{border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:8px 6px;text-align:center;vertical-align:middle;background:#fff}
+.req-board th{background:#f8fafc;font-size:12px;position:sticky;top:0;z-index:2}
+.req-board .staff-col{position:sticky;left:0;z-index:3;background:#fff;text-align:left;min-width:105px;max-width:120px;font-weight:800}
+.req-board th.staff-col{background:#f8fafc;z-index:4}
+.req-cell{display:block;border-radius:10px;padding:7px 4px;line-height:1.2;font-weight:800;white-space:nowrap}
+.req-cell.approved{background:#ecfdf5;color:#047857}
+.req-cell.pending{background:#fff7ed;color:#c2410c}
+.req-cell.rejected{background:#fef2f2;color:#b91c1c}
+.req-cell.off{background:#f1f5f9;color:#64748b}
+.req-cell.missing{background:#fff1f2;color:#be123c;font-weight:700}
+.req-board-legend{display:flex;gap:8px;flex-wrap:wrap;padding:0 14px 10px;color:var(--muted);font-size:11px}
+.req-board-legend span{display:inline-flex;align-items:center;gap:4px}
+.req-board-legend i{width:9px;height:9px;border-radius:3px;display:inline-block}
+.req-details-toggle{margin:12px 14px;width:calc(100% - 28px)}
+.req-details.hidden-details{display:none}
+
 .req-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
 .req-stat{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:9px;text-align:center}
 .req-stat b{display:block;font-size:18px}.req-stat small{font-size:11px;color:var(--muted)}
@@ -198,7 +216,7 @@ thead th:first-child{z-index:10}
     <div style="display:flex;align-items:center;gap:8px">
       <div>
         <h1>SHIFT MANAGER</h1>
-        <div class="sub" id="storeTitle">共有シフト管理 V12.7 AUTO MEMORY FIX</div>
+        <div class="sub" id="storeTitle">共有シフト管理 V12.8 REQUEST BOARD</div>
       </div>
       <div class="topright">
         <span class="role-pill" id="rolePill"></span>
@@ -293,7 +311,9 @@ thead th:first-child{z-index:10}
         <b>管理者の流れ：希望確認 → 承認 → 必要人数設定 → 自動作成</b>
         <small>NPの必要人数を日ごとに変更でき、固定OPENスタッフを指定してから自動編成できます。不足は作成後に警告します。</small>
       </div>
-      <div id="requestList"></div>
+      <div id="requestBoard"></div>
+      <button class="btn secondary req-details-toggle" id="requestDetailsToggle">提出詳細を見る</button>
+      <div id="requestList" class="req-details hidden-details"></div>
     </div>
   </section>
 
@@ -1087,6 +1107,38 @@ window.setReqGroupStatus=async(ids,status)=>{
   await loadAll();
 };
 
+function renderRequestBoard(visible){
+  const board=$('requestBoard');
+  if(!board)return;
+  const days=Array.from({length:7},(_,i)=>addDays(requestWeekStart,i));
+  const byStaff=new Map();
+  visible.forEach(r=>{
+    const st=requestStaff(r),key=st?String(st.id):`email:${r.user_email||'unknown'}`;
+    if(!byStaff.has(key))byStaff.set(key,{name:requestWho(r),rows:{}});
+    byStaff.get(key).rows[r.date]=r;
+  });
+  if(isAdmin()){
+    staff.filter(x=>x.active!==false).forEach(st=>{
+      const key=String(st.id);if(!byStaff.has(key))byStaff.set(key,{name:st.name,rows:{}});
+    });
+  }
+  const people=[...byStaff.values()].sort((a,b)=>a.name.localeCompare(b.name));
+  const wd=['日','月','火','水','木','金','土'];
+  const head=days.map(d=>`<th>${d.getMonth()+1}/${d.getDate()}<br>${wd[d.getDay()]}</th>`).join('');
+  const rows=people.map(p=>{
+    const cells=days.map(d=>{
+      const r=p.rows[fmt(d)];
+      if(!r)return `<td><span class="req-cell missing">未</span></td>`;
+      const shift=requestToShiftText(r),off=r.request_type==='off';
+      const cls=off?'off':(r.status||'pending');
+      const mark=r.status==='pending'?'● ':r.status==='rejected'?'× ':'';
+      return `<td><span class="req-cell ${cls}">${mark}${esc(shift)}</span></td>`;
+    }).join('');
+    return `<tr><td class="staff-col">${esc(p.name)}</td>${cells}</tr>`;
+  }).join('');
+  board.innerHTML=`<div class="req-board-wrap"><table class="req-board"><thead><tr><th class="staff-col">STAFF</th>${head}</tr></thead><tbody>${rows}</tbody></table></div><div class="req-board-legend"><span><i style="background:#ecfdf5"></i>承認済</span><span><i style="background:#fff7ed"></i>未処理</span><span><i style="background:#f1f5f9"></i>休み</span><span><i style="background:#fff1f2"></i>未提出</span></div>`;
+}
+
 function renderRequests(){
   $('reqWeekLabel').textContent=`${requestWeekStart.getMonth()+1}/${requestWeekStart.getDate()}〜${reqWeekEnd().getMonth()+1}/${reqWeekEnd().getDate()}`;
   let visible=requests.filter(r=>isInRequestWeek(r));
@@ -1094,9 +1146,12 @@ function renderRequests(){
 
   const pending=visible.filter(x=>x.status==='pending').length;
   const approved=visible.filter(x=>x.status==='approved').length;
-  const total=visible.length;
-  $('requestStats').innerHTML=`<div class="req-stat"><b>${total}</b><small>提出</small></div><div class="req-stat"><b>${pending}</b><small>未処理</small></div><div class="req-stat"><b>${approved}</b><small>承認済</small></div>`;
+  const submittedPeople=new Set(visible.map(r=>requestStaff(r)?.id||r.user_email).filter(Boolean)).size;
+  const activeCount=isAdmin()?staff.filter(x=>x.active!==false).length:1;
+  const missingPeople=Math.max(0,activeCount-submittedPeople);
+  $('requestStats').innerHTML=`<div class="req-stat"><b>${submittedPeople}</b><small>提出済</small></div><div class="req-stat"><b>${pending}</b><small>承認待ち</small></div><div class="req-stat"><b>${missingPeople}</b><small>未提出スタッフ</small></div>`;
 
+  renderRequestBoard(visible);
   if(!visible.length){
     $('requestList').innerHTML='<div class="notice">この週の希望提出はまだありません。</div>';
     return;
@@ -1106,24 +1161,15 @@ function renderRequests(){
   $('requestList').innerHTML=people.map(p=>{
     const email=p.rows[0]?.user_email||'';
     const head=`<div class="req-person-head"><div><b>${esc(p.who)}</b>${isAdmin()&&email&&p.who!==email?`<small>${esc(email)}</small>`:''}${isAdmin()&&!p.linked?`<div class="link-warning">古い希望データ：スタッフ未紐付けです。スタッフ名を選んで再提出すると自動シフトに使えます。</div>`:''}</div><span class="badge">${p.rows.length}日</span></div>`;
-
     const groups=p.groups.map(g=>{
       const r=g.rows[0],meta=requestMeta(r.memo),shift=requestToShiftText(r);
-      let acts='';
-      const ids=g.rows.map(x=>x.id);
-      const jsonIds=encodeURIComponent(JSON.stringify(ids));
+      let acts='';const ids=g.rows.map(x=>x.id);const jsonIds=encodeURIComponent(JSON.stringify(ids));
       if(isAdmin()){
-        if(r.status==='pending'){
-          acts=`<button class="btn green small" onclick="setReqGroupStatus(JSON.parse(decodeURIComponent('${jsonIds}')),'approved')">まとめて承認</button><button class="btn danger small" onclick="setReqGroupStatus(JSON.parse(decodeURIComponent('${jsonIds}')),'rejected')">まとめて却下</button>`;
-        }else{
-          acts=`<button class="btn secondary small" onclick="setReqGroupStatus(JSON.parse(decodeURIComponent('${jsonIds}')),'pending')">未処理に戻す</button>`;
-        }
-      }else if(r.status==='pending'){
-        acts=g.rows.map(x=>`<button class="btn danger small" onclick="deleteRequest('${x.id}')">${consecutiveLabel([x])} 削除</button>`).join('');
-      }
+        if(r.status==='pending')acts=`<button class="btn green small" onclick="setReqGroupStatus(JSON.parse(decodeURIComponent('${jsonIds}')),'approved')">まとめて承認</button><button class="btn danger small" onclick="setReqGroupStatus(JSON.parse(decodeURIComponent('${jsonIds}')),'rejected')">まとめて却下</button>`;
+        else acts=`<button class="btn secondary small" onclick="setReqGroupStatus(JSON.parse(decodeURIComponent('${jsonIds}')),'pending')">未処理に戻す</button>`;
+      }else if(r.status==='pending')acts=g.rows.map(x=>`<button class="btn danger small" onclick="deleteRequest('${x.id}')">${consecutiveLabel([x])} 削除</button>`).join('');
       return `<div class="req-group"><div class="req-group-top"><div class="req-group-main"><b><span class="req-days">${esc(consecutiveLabel(g.rows))}</span>　${esc(shift)}</b><small>${esc(requestLabel(r.request_type))}${meta.moveOk?' / 移動OK':''}${meta.memo?' / '+esc(meta.memo):''}</small></div><span class="badge ${statusClass(r.status)}">${esc(statusLabel(r.status))}</span></div>${acts?`<div class="item-actions" style="margin-top:9px">${acts}</div>`:''}</div>`;
     }).join('');
-
     return `<div class="req-person">${head}${groups}</div>`;
   }).join('');
 }
@@ -1146,6 +1192,7 @@ $('autoDraftBtn').onclick=createAutoDraft;
 $('approveAndDraftBtn').onclick=approveAndCreateDraft;
 $('runAutoScheduleBtn').onclick=async()=>{const b=$('runAutoScheduleBtn');if(b.disabled)return;autoSaveCurrentConfig();const old=b.textContent;b.disabled=true;b.textContent='作成中…';try{await runAutoSchedule()}catch(e){console.error(e);alert('自動作成エラー: '+(e?.message||String(e)))}finally{b.disabled=false;b.textContent=old}};
 $('approveAllBtn').onclick=approveAllThisWeek;
+$('requestDetailsToggle').onclick=()=>{const el=$('requestList'),b=$('requestDetailsToggle');el.classList.toggle('hidden-details');b.textContent=el.classList.contains('hidden-details')?'提出詳細を見る':'提出詳細を閉じる'};
 $('prevReqWeek').onclick=()=>{requestWeekStart=addDays(requestWeekStart,-7);renderRequests()};
 $('nextReqWeek').onclick=()=>{requestWeekStart=addDays(requestWeekStart,7);renderRequests()};
 $('todayReqWeek').onclick=()=>{requestWeekStart=getMonday(new Date());renderRequests()};
