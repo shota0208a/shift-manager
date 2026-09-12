@@ -129,6 +129,23 @@ thead th:first-child{z-index:10}
 .req-details-toggle{margin:12px 14px;width:calc(100% - 28px)}
 .req-details.hidden-details{display:none}
 
+
+.req-staff-list{padding:10px 12px;display:grid;gap:9px}
+.req-staff-card{width:100%;border:1px solid var(--line);background:#fff;border-radius:14px;padding:13px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;box-shadow:0 1px 2px rgba(15,23,42,.03)}
+.req-staff-card:active{transform:scale(.995)}
+.req-staff-name{font-size:16px;font-weight:900;color:var(--text)}
+.req-staff-sub{font-size:12px;color:var(--muted);margin-top:3px}
+.req-staff-right{display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+.change-pill{display:inline-flex;align-items:center;border-radius:999px;padding:4px 8px;font-size:11px;font-weight:900;background:#fff7ed;color:#c2410c}
+.req-detail-day{border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:9px;background:#fff}
+.req-detail-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.req-detail-date{font-weight:900;font-size:14px}
+.req-detail-shift{font-size:18px;font-weight:900;margin-top:4px}
+.req-change-box{margin-top:10px;border-radius:12px;padding:10px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412}
+.req-change-box b{display:block;margin-bottom:3px}
+.req-change-box small{display:block;line-height:1.45}
+.req-detail-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+
 .req-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
 .req-stat{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:9px;text-align:center}
 .req-stat b{display:block;font-size:18px}.req-stat small{font-size:11px;color:var(--muted)}
@@ -216,7 +233,7 @@ thead th:first-child{z-index:10}
     <div style="display:flex;align-items:center;gap:8px">
       <div>
         <h1>SHIFT MANAGER</h1>
-        <div class="sub" id="storeTitle">共有シフト管理 V12.8 REQUEST BOARD</div>
+        <div class="sub" id="storeTitle">共有シフト管理 V12.9 STAFF REQUEST</div>
       </div>
       <div class="topright">
         <span class="role-pill" id="rolePill"></span>
@@ -312,7 +329,7 @@ thead th:first-child{z-index:10}
         <small>NPの必要人数を日ごとに変更でき、固定OPENスタッフを指定してから自動編成できます。不足は作成後に警告します。</small>
       </div>
       <div id="requestBoard"></div>
-      <button class="btn secondary req-details-toggle" id="requestDetailsToggle">提出詳細を見る</button>
+      <button class="btn secondary req-details-toggle" id="requestDetailsToggle">全提出履歴を見る</button>
       <div id="requestList" class="req-details hidden-details"></div>
     </div>
   </section>
@@ -427,6 +444,14 @@ thead th:first-child{z-index:10}
 <div class="field"><label>メモ（任意）</label><textarea id="reqMemo" rows="2" placeholder="例：23時からなら確実"></textarea></div>
 <div class="actions"><button class="btn secondary" data-close="requestModal">閉じる</button><button class="btn blue" id="saveRequestBtn">提出</button></div>
 <button class="btn secondary" id="saveNextRequestBtn" style="width:100%;margin-top:8px">同じ内容で翌日へ →</button>
+</div></div>
+
+
+<!-- Staff request detail -->
+<div class="modal-bg" id="requestPersonModal"><div class="modal">
+  <div class="section-title" style="padding:0 0 12px;border:0"><span id="requestPersonTitle">希望詳細</span><button class="btn secondary small" data-close="requestPersonModal">閉じる</button></div>
+  <div id="requestPersonSummary" class="simple-help" style="margin-bottom:10px"></div>
+  <div id="requestPersonDays"></div>
 </div></div>
 
 <!-- Auto schedule settings -->
@@ -808,17 +833,21 @@ function requestMeta(memo){
   const sm=raw.match(/\[\[STORES:([^\]]*)\]\]/);
   const im=raw.match(/\[\[STAFF:([^\]]*)\]\]/);
   const mm=raw.match(/\[\[MOVE:(0|1)\]\]/);
+  const cm=raw.match(/\[\[CHANGE:([^\]]*)\]\]/);
   const stores=sm&&sm[1]?sm[1].split(',').map(x=>x.trim()).filter(Boolean):[];
   const staffId=im&&im[1]?im[1].trim():'';
   const moveOk=mm?mm[1]==='1':false;
-  const clean=raw.replace(/^(?:\[\[(?:STORES|STAFF|MOVE):[^\]]*\]\]\s*)+/,'');
-  return {stores,staffId,moveOk,memo:clean};
+  let change=null;
+  if(cm&&cm[1]){try{change=JSON.parse(decodeURIComponent(cm[1]))}catch(e){change=null}}
+  const clean=raw.replace(/\[\[(?:STORES|STAFF|MOVE|CHANGE):[^\]]*\]\]\s*/g,'').trim();
+  return {stores,staffId,moveOk,change,memo:clean};
 }
-function encodeRequestMemo(stores,memo,staffId='',moveOk=false){
+function encodeRequestMemo(stores,memo,staffId='',moveOk=false,change=null){
   let meta='';
   if(stores&&stores.length)meta+=`[[STORES:${stores.join(',')}]] `;
   if(staffId)meta+=`[[STAFF:${staffId}]] `;
   meta+=`[[MOVE:${moveOk?1:0}]] `;
+  if(change)meta+=`[[CHANGE:${encodeURIComponent(JSON.stringify(change))}]] `;
   return meta+(memo||'').trim();
 }
 function normTime(v,isEnd=false){
@@ -1110,34 +1139,81 @@ window.setReqGroupStatus=async(ids,status)=>{
 function renderRequestBoard(visible){
   const board=$('requestBoard');
   if(!board)return;
-  const days=Array.from({length:7},(_,i)=>addDays(requestWeekStart,i));
   const byStaff=new Map();
   visible.forEach(r=>{
     const st=requestStaff(r),key=st?String(st.id):`email:${r.user_email||'unknown'}`;
-    if(!byStaff.has(key))byStaff.set(key,{name:requestWho(r),rows:{}});
-    byStaff.get(key).rows[r.date]=r;
+    if(!byStaff.has(key))byStaff.set(key,{key,name:requestWho(r),rows:[]});
+    byStaff.get(key).rows.push(r);
   });
   if(isAdmin()){
     staff.filter(x=>x.active!==false).forEach(st=>{
-      const key=String(st.id);if(!byStaff.has(key))byStaff.set(key,{name:st.name,rows:{}});
+      const key=String(st.id);if(!byStaff.has(key))byStaff.set(key,{key,name:st.name,rows:[]});
     });
   }
   const people=[...byStaff.values()].sort((a,b)=>a.name.localeCompare(b.name));
-  const wd=['日','月','火','水','木','金','土'];
-  const head=days.map(d=>`<th>${d.getMonth()+1}/${d.getDate()}<br>${wd[d.getDay()]}</th>`).join('');
-  const rows=people.map(p=>{
-    const cells=days.map(d=>{
-      const r=p.rows[fmt(d)];
-      if(!r)return `<td><span class="req-cell missing">未</span></td>`;
-      const shift=requestToShiftText(r),off=r.request_type==='off';
-      const cls=off?'off':(r.status||'pending');
-      const mark=r.status==='pending'?'● ':r.status==='rejected'?'× ':'';
-      return `<td><span class="req-cell ${cls}">${mark}${esc(shift)}</span></td>`;
-    }).join('');
-    return `<tr><td class="staff-col">${esc(p.name)}</td>${cells}</tr>`;
+  if(!people.length){board.innerHTML='<div class="notice" style="margin:12px">スタッフがいません。</div>';return}
+  const html=people.map(p=>{
+    const submitted=new Set(p.rows.map(r=>r.date)).size;
+    const pending=p.rows.filter(r=>r.status==='pending').length;
+    const changes=p.rows.filter(r=>requestMeta(r.memo).change?.state==='open').length;
+    const status=submitted===0?'未提出':`${submitted}/7日 提出`;
+    return `<button class="req-staff-card" onclick="openRequestPerson('${encodeURIComponent(p.key)}')"><div><div class="req-staff-name">${esc(p.name)}</div><div class="req-staff-sub">${status}${pending?` ・ 承認待ち${pending}`:''}</div></div><div class="req-staff-right">${changes?`<span class="change-pill">変更依頼 ${changes}</span>`:''}<span class="badge">詳細 ›</span></div></button>`;
   }).join('');
-  board.innerHTML=`<div class="req-board-wrap"><table class="req-board"><thead><tr><th class="staff-col">STAFF</th>${head}</tr></thead><tbody>${rows}</tbody></table></div><div class="req-board-legend"><span><i style="background:#ecfdf5"></i>承認済</span><span><i style="background:#fff7ed"></i>未処理</span><span><i style="background:#f1f5f9"></i>休み</span><span><i style="background:#fff1f2"></i>未提出</span></div>`;
+  board.innerHTML=`<div class="req-staff-list">${html}</div>`;
 }
+
+window.openRequestPerson=function(encodedKey){
+  const key=decodeURIComponent(encodedKey);
+  let visible=requests.filter(r=>isInRequestWeek(r));
+  if(!isAdmin())visible=visible.filter(r=>r.user_id===currentUser.id);
+  let personRows=[];let name='スタッフ';
+  if(key.startsWith('email:')){
+    const email=key.slice(6);personRows=visible.filter(r=>(r.user_email||'')===email);name=personRows[0]?requestWho(personRows[0]):email;
+  }else{
+    const st=staff.find(x=>String(x.id)===String(key));if(st)name=st.name;
+    personRows=visible.filter(r=>String(requestStaff(r)?.id||'')===String(key));
+  }
+  const byDate=new Map(personRows.map(r=>[r.date,r]));
+  const days=Array.from({length:7},(_,i)=>addDays(requestWeekStart,i));
+  const wd=['日','月','火','水','木','金','土'];
+  $('requestPersonTitle').textContent=name+' の希望';
+  const openChanges=personRows.filter(r=>requestMeta(r.memo).change?.state==='open').length;
+  $('requestPersonSummary').innerHTML=`${requestWeekStart.getMonth()+1}/${requestWeekStart.getDate()}〜${reqWeekEnd().getMonth()+1}/${reqWeekEnd().getDate()}　提出 ${new Set(personRows.map(r=>r.date)).size}/7日${openChanges?`<br><b style="color:#c2410c">変更依頼 ${openChanges}件あり</b>`:''}`;
+  $('requestPersonDays').innerHTML=days.map(d=>{
+    const date=fmt(d),r=byDate.get(date);
+    if(!r)return `<div class="req-detail-day"><div class="req-detail-top"><div><div class="req-detail-date">${d.getMonth()+1}/${d.getDate()}(${wd[d.getDay()]})</div><div class="req-detail-shift" style="color:#94a3b8">未提出</div></div></div></div>`;
+    const meta=requestMeta(r.memo),change=meta.change;
+    const changeBox=change?.state==='open'?`<div class="req-change-box"><b>📩 管理者から変更のお願い</b><small>希望：${esc(change.shift||'相談')}</small>${change.note?`<small>内容：${esc(change.note)}</small>`:''}</div>`:'';
+    let actions='';
+    if(isAdmin())actions=`<div class="req-detail-actions"><button class="btn secondary small" onclick="askRequestChange('${r.id}')">変更をお願い</button>${r.status==='pending'?`<button class="btn green small" onclick="setReqStatus('${r.id}','approved');hide('requestPersonModal')">承認</button>`:''}${change?.state==='open'?`<button class="btn secondary small" onclick="clearRequestChange('${r.id}')">依頼を取り消す</button>`:''}</div>`;
+    return `<div class="req-detail-day"><div class="req-detail-top"><div><div class="req-detail-date">${d.getMonth()+1}/${d.getDate()}(${wd[d.getDay()]})</div><div class="req-detail-shift">${esc(requestToShiftText(r))}</div>${meta.memo?`<div class="req-staff-sub">メモ：${esc(meta.memo)}</div>`:''}</div><span class="badge ${statusClass(r.status)}">${esc(statusLabel(r.status))}</span></div>${changeBox}${actions}</div>`;
+  }).join('');
+  show('requestPersonModal');
+};
+
+window.askRequestChange=async function(id){
+  const r=requests.find(x=>String(x.id)===String(id));if(!r)return;
+  const current=requestToShiftText(r);
+  const shift=prompt('変更してほしい時間を入力してください\n例：24〜L、18〜5',current);
+  if(shift===null)return;
+  const note=prompt('スタッフへのメッセージ（任意）\n例：金曜だけ24時からお願いできますか？','') ?? '';
+  const meta=requestMeta(r.memo);
+  const change={state:'open',shift:(shift||'相談').trim(),note:(note||'').trim(),requestedAt:new Date().toISOString()};
+  const memo=encodeRequestMemo(meta.stores,meta.memo,meta.staffId,meta.moveOk,change);
+  const {error}=await supabaseClient.from('shift_requests').update({memo}).eq('id',id);
+  if(error)return alert(error.message);
+  await loadAll();
+  const st=requestStaff(r);openRequestPerson(encodeURIComponent(st?String(st.id):`email:${r.user_email||''}`));
+};
+
+window.clearRequestChange=async function(id){
+  const r=requests.find(x=>String(x.id)===String(id));if(!r)return;
+  const meta=requestMeta(r.memo);
+  const memo=encodeRequestMemo(meta.stores,meta.memo,meta.staffId,meta.moveOk,null);
+  const {error}=await supabaseClient.from('shift_requests').update({memo}).eq('id',id);
+  if(error)return alert(error.message);
+  await loadAll();hide('requestPersonModal');
+};
 
 function renderRequests(){
   $('reqWeekLabel').textContent=`${requestWeekStart.getMonth()+1}/${requestWeekStart.getDate()}〜${reqWeekEnd().getMonth()+1}/${reqWeekEnd().getDate()}`;
@@ -1192,7 +1268,7 @@ $('autoDraftBtn').onclick=createAutoDraft;
 $('approveAndDraftBtn').onclick=approveAndCreateDraft;
 $('runAutoScheduleBtn').onclick=async()=>{const b=$('runAutoScheduleBtn');if(b.disabled)return;autoSaveCurrentConfig();const old=b.textContent;b.disabled=true;b.textContent='作成中…';try{await runAutoSchedule()}catch(e){console.error(e);alert('自動作成エラー: '+(e?.message||String(e)))}finally{b.disabled=false;b.textContent=old}};
 $('approveAllBtn').onclick=approveAllThisWeek;
-$('requestDetailsToggle').onclick=()=>{const el=$('requestList'),b=$('requestDetailsToggle');el.classList.toggle('hidden-details');b.textContent=el.classList.contains('hidden-details')?'提出詳細を見る':'提出詳細を閉じる'};
+$('requestDetailsToggle').onclick=()=>{const el=$('requestList'),b=$('requestDetailsToggle');el.classList.toggle('hidden-details');b.textContent=el.classList.contains('hidden-details')?'全提出履歴を見る':'全提出履歴を閉じる'};
 $('prevReqWeek').onclick=()=>{requestWeekStart=addDays(requestWeekStart,-7);renderRequests()};
 $('nextReqWeek').onclick=()=>{requestWeekStart=addDays(requestWeekStart,7);renderRequests()};
 $('todayReqWeek').onclick=()=>{requestWeekStart=getMonday(new Date());renderRequests()};
