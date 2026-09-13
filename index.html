@@ -234,7 +234,7 @@ thead th:first-child{z-index:10}
     <div style="display:flex;align-items:center;gap:8px">
       <div>
         <h1>SHIFT MANAGER</h1>
-        <div class="sub" id="storeTitle">共有シフト管理 V13.3 FILL STAFF</div>
+        <div class="sub" id="storeTitle">共有シフト管理 V13.4 DUPLICATE FIX</div>
       </div>
       <div class="topright">
         <span class="role-pill" id="rolePill"></span>
@@ -1229,11 +1229,19 @@ async function runAutoSchedule(){
   if(fillUsed.length)warnings.unshift(`穴埋め使用：${fillUsed.join(' / ')}`);
   if(!confirm(`${allAssignments.length}件のNPシフト案を作成します。${warnings.length?`\n不足・確認事項 ${warnings.length}件あり`:''}`))return;
 
-  // 前回のNP自動生成結果が残らないよう、この週のNPシフトだけ一度消してから保存。
-  const weekEnd=fmt(addDays(requestWeekStart,6));
-  const clear=await supabaseClient.from('shifts').delete().gte('date',fmt(requestWeekStart)).lte('date',weekEnd).like('display_text','% NP');
-  if(clear.error)return alert('前回シフトの整理に失敗しました: '+clear.error.message);
+  // staff_id + date はDBで一意。保存前に同じスタッフ・同じ日の既存シフトを確実に消してからINSERTする。
+  // これにより手動編集済みシフトや旧形式の表示文字が残っていても duplicate key にならない。
+  const uniqueAssignments=[];
+  const seenAssignmentKeys=new Set();
   for(const a of allAssignments){
+    const key=`${a.staff.id}__${a.cfg.date}`;
+    if(seenAssignmentKeys.has(key))continue;
+    seenAssignmentKeys.add(key);
+    uniqueAssignments.push(a);
+  }
+  for(const a of uniqueAssignments){
+    const del=await supabaseClient.from('shifts').delete().eq('staff_id',a.staff.id).eq('date',a.cfg.date);
+    if(del.error)return alert('既存シフトの整理に失敗しました: '+del.error.message);
     const row={staff_id:a.staff.id,date:a.cfg.date,display_text:formatAssignment(a,a.cfg),role:a.fixed?'OPEN':a.fill?'FILL':''};
     const ins=await supabaseClient.from('shifts').insert(row);
     if(ins.error)return alert('シフト保存に失敗しました: '+ins.error.message);
