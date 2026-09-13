@@ -168,6 +168,7 @@ thead th:first-child{z-index:10}
 .staff-manage-main b{display:block}
 .staff-manage-main small{display:block;color:var(--muted);margin-top:3px;overflow-wrap:anywhere}
 .staff-manage-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.fill-badge{display:inline-block;margin-left:6px;padding:2px 6px;border-radius:999px;background:#fff7ed;color:#c2410c;font-size:10px;font-weight:900}
 .checkrow{display:flex;align-items:center;gap:9px;padding:10px 0;font-weight:800}
 .checkrow input{width:20px;height:20px}
 .req-type-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:0 0 14px}
@@ -233,7 +234,7 @@ thead th:first-child{z-index:10}
     <div style="display:flex;align-items:center;gap:8px">
       <div>
         <h1>SHIFT MANAGER</h1>
-        <div class="sub" id="storeTitle">共有シフト管理 V13.2 SHIFT SAVE FIX</div>
+        <div class="sub" id="storeTitle">共有シフト管理 V13.3 FILL STAFF</div>
       </div>
       <div class="topright">
         <span class="role-pill" id="rolePill"></span>
@@ -419,6 +420,26 @@ thead th:first-child{z-index:10}
   </div>
 </div>
 
+<!-- Fill staff settings -->
+<div class="modal-bg" id="fillStaffModal">
+  <div class="modal">
+    <h2 id="fillStaffTitle">穴埋め要員設定</h2>
+    <div class="simple-help" style="margin-bottom:12px">通常の希望だけで人数が足りない時に、自動シフトがこのスタッフを候補にします。<b>休み提出の日には入れません。</b></div>
+    <label class="checkrow"><input id="fillEnabled" type="checkbox"> 穴埋め要員として使う</label>
+    <div class="field"><label>穴埋めできる時間帯</label><select id="fillTimeRange">
+      <option value="18-L">18〜LAST</option>
+      <option value="23-L">23〜LAST</option>
+      <option value="24-L">24〜LAST</option>
+      <option value="5-L">5〜LAST</option>
+    </select></div>
+    <div class="field"><label>1週間で穴埋めに使う上限</label><select id="fillMaxWeekly">
+      <option value="1">週1回まで</option><option value="2" selected>週2回まで</option><option value="3">週3回まで</option><option value="4">週4回まで</option><option value="5">週5回まで</option><option value="6">週6回まで</option><option value="7">上限なし</option>
+    </select></div>
+    <div class="notice">金・土から先に自動作成するため、穴埋め要員も金・土の不足を優先して使います。</div>
+    <div class="actions"><button class="btn secondary" data-close="fillStaffModal">キャンセル</button><button class="btn blue" id="saveFillStaffBtn">保存</button></div>
+  </div>
+</div>
+
 <!-- Request -->
 <div class="modal-bg" id="requestModal"><div class="modal">
 <h2>希望シフト提出</h2>
@@ -555,6 +576,30 @@ async function saveManagerEmails(list){
   managerEmails=emails;
 }
 
+const FILL_STAFF_EVENT='__SHIFT_MANAGER_FILL_STAFF__';
+let activeFillStaffId='';
+function fillStaffMetaEvent(){return events.find(e=>e.name===FILL_STAFF_EVENT)}
+function readFillStaffSettings(){
+  const meta=fillStaffMetaEvent();
+  if(!meta?.time_text)return {};
+  try{const obj=JSON.parse(meta.time_text);return obj&&typeof obj==='object'?obj:{}}catch(e){return {}}
+}
+async function saveFillStaffSettings(settings){
+  const existing=fillStaffMetaEvent();
+  const row={date:'2099-01-03',name:FILL_STAFF_EVENT,time_text:JSON.stringify(settings)};
+  const q=existing?supabaseClient.from('events').update(row).eq('id',existing.id):supabaseClient.from('events').insert(row);
+  const {error}=await q;if(error)throw error;
+}
+function fillRangeLabel(v){return {'18-L':'18〜L','23-L':'23〜L','24-L':'24〜L','5-L':'5〜L'}[v]||'18〜L'}
+function fillAvailability(setting,cfg){
+  const range=setting?.range||'18-L';
+  const starts={'18-L':18,'23-L':23,'24-L':24,'5-L':29};
+  let start=starts[range]??18;
+  start=Math.max(start,cfg.open);
+  const end=cfg.last;
+  return end>start?{start,end}:null;
+}
+
 function initConfig(){
   const url='https://qnozpavhwlekgbwednlh.supabase.co';
   const key='sb_publishable_qEkraX86eJeE6g0SqFs06g_l_nbZOuK';
@@ -661,7 +706,7 @@ function renderDay(){
   const active=staff.filter(x=>x.active!==false);
   const assigned=active.map(s=>({s,sh:shifts.find(x=>String(x.staff_id)===String(s.id)&&x.date===date)})).filter(x=>x.sh?.display_text&&x.sh.display_text!=='休み');
   $('dayStaffCount').textContent=`${assigned.length}人`;
-  $('dayStaffList').innerHTML=assigned.length?assigned.map(({s,sh})=>`<div class="day-shift-card" ${isAdmin()?`onclick="openShift('${s.id}','${date}')" style="cursor:pointer"`:''}><div class="day-staff-name">${esc(s.name)}${sh.role==='OPEN'?'<span class="day-open-badge">OPEN</span>':''}</div><div class="day-shift-time">${shiftHtml(sh.display_text)}</div></div>`).join(''):'<div class="day-empty">この日のシフトはまだありません</div>';
+  $('dayStaffList').innerHTML=assigned.length?assigned.map(({s,sh})=>`<div class="day-shift-card" ${isAdmin()?`onclick="openShift('${s.id}','${date}')" style="cursor:pointer"`:''}><div class="day-staff-name">${esc(s.name)}${sh.role==='OPEN'?'<span class="day-open-badge">OPEN</span>':sh.role==='FILL'?'<span class="day-open-badge" style="background:#fff7ed;color:#c2410c">穴埋め</span>':''}</div><div class="day-shift-time">${shiftHtml(sh.display_text)}</div></div>`).join(''):'<div class="day-empty">この日のシフトはまだありません</div>';
   const unassigned=active.filter(s=>!assigned.some(x=>String(x.s.id)===String(s.id)));
   $('dayUnassigned').innerHTML=unassigned.length?`<details class="day-unassigned"><summary>未配置・休み ${unassigned.length}人</summary><div class="day-unassigned-names">${unassigned.map(s=>esc(s.name)).join(' / ')}</div></details>`:'';
 }
@@ -684,7 +729,7 @@ function renderWeek(){
     days.forEach(d=>{
       const sh=shifts.find(x=>x.staff_id===s.id&&x.date===fmt(d));
       const cls=d.getDay()===6?'sat':d.getDay()===0?'sun':'';
-      const role=sh?.role==='OPEN'?'<span class="open-badge">OPEN</span>':'';
+      const role=sh?.role==='OPEN'?'<span class="open-badge">OPEN</span>':sh?.role==='FILL'?'<span class="open-badge" style="background:#fff7ed;color:#c2410c">穴埋め</span>':'';
       if(isAdmin()) h+=`<td class="${cls}"><button class="shift-btn ${sh?.display_text?'':'empty'}" onclick="openShift('${s.id}','${fmt(d)}')">${sh?.display_text?shiftHtml(sh.display_text):'＋'}${role}</button></td>`;
       else h+=`<td class="${cls}"><span style="font-weight:900;color:${sh?.display_text?'var(--blue)':'#c7cbd1'}">${sh?.display_text?shiftHtml(sh.display_text):'—'}${role}</span></td>`;
     });
@@ -764,15 +809,17 @@ $('clearShiftBtn').onclick=async()=>{
 
 function renderStaffManagement(){
   const rows=staff.slice().sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+  const fill=readFillStaffSettings();
   $('staffManageList').innerHTML=rows.length?rows.map(s=>{
-    const manager=isManagerEmail(s.email);
+    const manager=isManagerEmail(s.email),fs=fill[String(s.id)],fillOn=!!fs?.enabled;
     return `<div class="staff-manage-row">
       <div class="staff-manage-main">
-        <b>${esc(s.name)}${manager?'<span class="manager-badge">MANAGER</span>':''}</b>
-        <small>${esc(s.email||'メール未登録')} / ${s.active===false?'非表示':'表示中'}</small>
+        <b>${esc(s.name)}${manager?'<span class="manager-badge">MANAGER</span>':''}${fillOn?'<span class="fill-badge">穴埋め</span>':''}</b>
+        <small>${esc(s.email||'メール未登録')} / ${s.active===false?'非表示':'表示中'}${fillOn?` / ${fillRangeLabel(fs.range)}・週${Number(fs.maxWeekly)||2}回まで`:''}</small>
       </div>
       <div class="staff-manage-actions">
         <button class="btn secondary small" onclick="editStaffName('${s.id}')">名前変更</button>
+        <button class="btn secondary small" onclick="openFillStaff('${s.id}')">穴埋め設定</button>
         <button class="btn ${manager?'secondary':'green'} small" onclick="toggleManager('${s.id}')">${manager?'管理者解除':'管理者にする'}</button>
         <button class="btn secondary small" onclick="toggleStaffActive('${s.id}')">${s.active===false?'表示':'非表示'}</button>
         <button class="btn danger small" onclick="deleteStaff('${s.id}')">削除</button>
@@ -834,6 +881,26 @@ window.editStaffName=async(id)=>{
   }catch(e){ console.warn('test name sync skipped',e); }
   await loadAll();
   renderStaffManagement();
+};
+
+window.openFillStaff=(id)=>{
+  if(!isAdmin())return;
+  const st=staff.find(x=>String(x.id)===String(id));if(!st)return;
+  activeFillStaffId=String(id);
+  const fs=readFillStaffSettings()[activeFillStaffId]||{};
+  $('fillStaffTitle').textContent=`${st.name} / 穴埋め要員設定`;
+  $('fillEnabled').checked=!!fs.enabled;
+  $('fillTimeRange').value=fs.range||'18-L';
+  $('fillMaxWeekly').value=String(fs.maxWeekly||2);
+  show('fillStaffModal');
+};
+$('saveFillStaffBtn').onclick=async()=>{
+  if(!isAdmin()||!activeFillStaffId)return;
+  const all=readFillStaffSettings();
+  all[activeFillStaffId]={enabled:$('fillEnabled').checked,range:$('fillTimeRange').value,maxWeekly:Number($('fillMaxWeekly').value||2)};
+  try{
+    await saveFillStaffSettings(all);hide('fillStaffModal');await loadAll();renderStaffManagement();
+  }catch(e){alert('穴埋め設定を保存できませんでした。\n'+(e?.message||String(e)))}
 };
 
 window.toggleManager=async(id)=>{
@@ -1062,6 +1129,8 @@ async function runAutoSchedule(){
   const flexOffDays=Math.max(0,Math.min(6,Number($('autoFlexOffDays')?.value||1)));
   const flexMaxDays=7-flexOffDays;
   const flexAssignedDates=new Set();
+  const fillSettings=readFillStaffSettings();
+  const fillUseCount=new Map();
 
   // 休み自由スタッフの「通常勤務時間」は、その週で最も多い出勤希望時間を使う。
   let flexBase=null;
@@ -1124,6 +1193,27 @@ async function runAutoSchedule(){
       if(best.flex)flexAssignedDates.add(cfg.date);
     }
 
+    // 通常希望だけで不足している時だけ「穴埋め要員」を使う。休み提出日は除外。
+    let fillGuard=0;
+    while(deficits(coverageForAssignments(as,cfg),cfg).length&&fillGuard++<30){
+      const fillPeople=[];
+      for(const st of staff.filter(x=>x.active!==false)){
+        const fs=fillSettings[String(st.id)];
+        if(!fs?.enabled)continue;
+        if(as.some(a=>String(a.staff.id)===String(st.id)))continue;
+        const used=fillUseCount.get(String(st.id))||0,max=Math.max(1,Math.min(7,Number(fs.maxWeekly)||2));
+        if(used>=max)continue;
+        const explicitOff=dayReqs.some(r=>String(requestStaff(r)?.id)===String(st.id)&&r.request_type==='off');
+        if(explicitOff)continue;
+        const av=fillAvailability(fs,cfg);if(!av)continue;
+        fillPeople.push({staff:st,request:null,av,candidates:candidateTemplates(av,cfg)});
+      }
+      const best=chooseBestCandidate(fillPeople,as,cfg);
+      if(!best)break;
+      best.fill=true;as.push(best);
+      const sid=String(best.staff.id);fillUseCount.set(sid,(fillUseCount.get(sid)||0)+1);
+    }
+
     const rem=deficits(coverageForAssignments(as,cfg),cfg);
     if(rem.length){let groups=[],cur=null;for(const x of rem){if(!cur||x.h!==cur.end||x.d!==cur.d){cur={start:x.h,end:x.h+1,d:x.d};groups.push(cur)}else cur.end=x.h+1}groups.forEach(g=>warnings.push(`${cfg.date}: ${displayHour(g.start,cfg.last)}〜${displayHour(g.end,cfg.last)} ${g.d}人不足`));}
     as.forEach(a=>allAssignments.push({cfg,...a}));
@@ -1135,6 +1225,8 @@ async function runAutoSchedule(){
     const offDates=configs.map(c=>c.date).filter(d=>!flexAssignedDates.has(d));
     warnings.unshift(`${st?.name||'休み自動調整スタッフ'}：休み ${offDates.length?offDates.map(d=>`${parseDate(d).getMonth()+1}/${parseDate(d).getDate()}`).join('・'):'なし'}`);
   }
+  const fillUsed=[...fillUseCount.entries()].filter(([,n])=>n>0).map(([id,n])=>`${staff.find(x=>String(x.id)===id)?.name||'穴埋め'} ${n}回`);
+  if(fillUsed.length)warnings.unshift(`穴埋め使用：${fillUsed.join(' / ')}`);
   if(!confirm(`${allAssignments.length}件のNPシフト案を作成します。${warnings.length?`\n不足・確認事項 ${warnings.length}件あり`:''}`))return;
 
   // 前回のNP自動生成結果が残らないよう、この週のNPシフトだけ一度消してから保存。
@@ -1142,7 +1234,7 @@ async function runAutoSchedule(){
   const clear=await supabaseClient.from('shifts').delete().gte('date',fmt(requestWeekStart)).lte('date',weekEnd).like('display_text','% NP');
   if(clear.error)return alert('前回シフトの整理に失敗しました: '+clear.error.message);
   for(const a of allAssignments){
-    const row={staff_id:a.staff.id,date:a.cfg.date,display_text:formatAssignment(a,a.cfg),role:a.fixed?'OPEN':''};
+    const row={staff_id:a.staff.id,date:a.cfg.date,display_text:formatAssignment(a,a.cfg),role:a.fixed?'OPEN':a.fill?'FILL':''};
     const ins=await supabaseClient.from('shifts').insert(row);
     if(ins.error)return alert('シフト保存に失敗しました: '+ins.error.message);
   }
