@@ -233,7 +233,7 @@ thead th:first-child{z-index:10}
     <div style="display:flex;align-items:center;gap:8px">
       <div>
         <h1>SHIFT MANAGER</h1>
-        <div class="sub" id="storeTitle">共有シフト管理 V13 TEST EDIT</div>
+        <div class="sub" id="storeTitle">共有シフト管理 V13.1 REQUEST EDIT</div>
       </div>
       <div class="topright">
         <span class="role-pill" id="rolePill"></span>
@@ -364,7 +364,10 @@ thead th:first-child{z-index:10}
       <button type="button" class="preset" data-shift-preset="18〜5">18〜5</button>
       <button type="button" class="preset" data-shift-preset="18〜6">18〜6</button>
       <button type="button" class="preset" data-shift-preset="19〜L">19〜L</button>
-      <button type="button" class="preset" data-shift-preset="23〜L">23〜L</button>
+      <button type="button" class="preset" data-shift-preset="21〜5">21〜5</button>
+       <button type="button" class="preset" data-shift-preset="23〜5">23〜5</button>
+       <button type="button" class="preset" data-shift-preset="23〜L">23〜L</button>
+       <button type="button" class="preset" data-shift-preset="24〜8">24〜8</button>
       <button type="button" class="preset" data-shift-preset="24〜L">24〜L</button>
       <button type="button" class="preset" data-shift-preset="after〜L">after〜L</button>
       <button type="button" class="preset" data-shift-preset="OPEN〜L">OPEN〜L</button>
@@ -452,6 +455,26 @@ thead th:first-child{z-index:10}
   <div class="section-title" style="padding:0 0 12px;border:0"><span id="requestPersonTitle">希望詳細</span><button class="btn secondary small" data-close="requestPersonModal">閉じる</button></div>
   <div id="requestPersonSummary" class="simple-help" style="margin-bottom:10px"></div>
   <div id="requestPersonDays"></div>
+</div></div>
+
+<!-- Request direct edit -->
+<div class="modal-bg" id="requestEditModal"><div class="modal">
+  <h2 id="requestEditTitle">希望時間を編集</h2>
+  <div class="simple-help" style="margin-bottom:10px">テスト用：ボタンを押すだけで希望時間を変更できます。下の欄へ直接入力もできます。</div>
+  <div class="field"><label>希望時間</label><input id="requestEditValue" placeholder="例：24〜8 / 18〜5 / 休み"></div>
+  <div class="preset-grid" id="requestEditPresets">
+    <button type="button" class="preset" data-request-edit="18〜23">18〜23</button>
+    <button type="button" class="preset" data-request-edit="18〜5">18〜5</button>
+    <button type="button" class="preset" data-request-edit="18〜6">18〜6</button>
+    <button type="button" class="preset" data-request-edit="18〜L">18〜L</button>
+    <button type="button" class="preset" data-request-edit="21〜5">21〜5</button>
+    <button type="button" class="preset" data-request-edit="23〜5">23〜5</button>
+    <button type="button" class="preset" data-request-edit="23〜L">23〜L</button>
+    <button type="button" class="preset" data-request-edit="24〜8">24〜8</button>
+    <button type="button" class="preset" data-request-edit="24〜L">24〜L</button>
+    <button type="button" class="preset" data-request-edit="休み">休み</button>
+  </div>
+  <div class="actions"><button class="btn secondary" data-close="requestEditModal">キャンセル</button><button class="btn blue" id="saveRequestEditBtn">希望を保存</button></div>
 </div></div>
 
 <!-- Auto schedule settings -->
@@ -1212,19 +1235,33 @@ function parseAdminShiftInput(input){
 function requestPersonKey(r){
   const st=requestStaff(r);return st?String(st.id):`email:${r.user_email||''}`;
 }
-window.adminEditRequest=async function(id){
+let activeRequestEditId=null;
+window.adminEditRequest=function(id){
   if(!isAdmin())return;
   const r=requests.find(x=>String(x.id)===String(id));if(!r)return;
-  const current=requestToShiftText(r);
-  const input=prompt('希望時間を直接変更します。\n例：18〜5 / 24〜L / 休み',current);
-  if(input===null)return;
-  const parsed=parseAdminShiftInput(input);
-  if(!parsed)return alert('入力形式を確認してください。\n例：18〜5 / 24〜L / 休み');
+  activeRequestEditId=id;
+  const who=requestWho(r);
+  $('requestEditTitle').textContent=`${who} / ${r.date} 希望編集`;
+  $('requestEditValue').value=requestToShiftText(r);
+  document.querySelectorAll('[data-request-edit]').forEach(b=>b.classList.toggle('active',b.dataset.requestEdit===$('requestEditValue').value.trim()));
+  show('requestEditModal');
+};
+document.querySelectorAll('[data-request-edit]').forEach(b=>b.onclick=()=>{
+  $('requestEditValue').value=b.dataset.requestEdit;
+  document.querySelectorAll('[data-request-edit]').forEach(x=>x.classList.toggle('active',x===b));
+});
+$('requestEditValue').addEventListener('input',()=>document.querySelectorAll('[data-request-edit]').forEach(b=>b.classList.toggle('active',b.dataset.requestEdit===$('requestEditValue').value.trim())));
+$('saveRequestEditBtn').onclick=async()=>{
+  if(!activeRequestEditId)return;
+  const r=requests.find(x=>String(x.id)===String(activeRequestEditId));if(!r)return;
+  const parsed=parseAdminShiftInput($('requestEditValue').value);
+  if(!parsed)return alert('入力形式を確認してください。\n例：18〜5 / 24〜8 / 24〜L / 休み');
   const meta=requestMeta(r.memo);
   const memo=encodeRequestMemo(meta.stores,meta.memo,meta.staffId,meta.moveOk,null);
-  const {error}=await supabaseClient.from('shift_requests').update({...parsed,memo,status:'approved'}).eq('id',id);
+  const {error}=await supabaseClient.from('shift_requests').update({...parsed,memo,status:'approved'}).eq('id',activeRequestEditId);
   if(error)return alert('変更できませんでした。\n'+error.message);
   const key=requestPersonKey(r);
+  hide('requestEditModal');
   await loadAll();openRequestPerson(encodeURIComponent(key));
 };
 window.adminAddRequest=async function(encodedKey,date){
