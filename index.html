@@ -233,7 +233,7 @@ thead th:first-child{z-index:10}
     <div style="display:flex;align-items:center;gap:8px">
       <div>
         <h1>SHIFT MANAGER</h1>
-        <div class="sub" id="storeTitle">共有シフト管理 V12.9 STAFF REQUEST</div>
+        <div class="sub" id="storeTitle">共有シフト管理 V13 TEST EDIT</div>
       </div>
       <div class="topright">
         <span class="role-pill" id="rolePill"></span>
@@ -1181,14 +1181,65 @@ window.openRequestPerson=function(encodedKey){
   $('requestPersonSummary').innerHTML=`${requestWeekStart.getMonth()+1}/${requestWeekStart.getDate()}〜${reqWeekEnd().getMonth()+1}/${reqWeekEnd().getDate()}　提出 ${new Set(personRows.map(r=>r.date)).size}/7日${openChanges?`<br><b style="color:#c2410c">変更依頼 ${openChanges}件あり</b>`:''}`;
   $('requestPersonDays').innerHTML=days.map(d=>{
     const date=fmt(d),r=byDate.get(date);
-    if(!r)return `<div class="req-detail-day"><div class="req-detail-top"><div><div class="req-detail-date">${d.getMonth()+1}/${d.getDate()}(${wd[d.getDay()]})</div><div class="req-detail-shift" style="color:#94a3b8">未提出</div></div></div></div>`;
+    if(!r){
+      const addBtn=isAdmin()?`<div class="req-detail-actions"><button class="btn blue small" onclick="adminAddRequest('${encodeURIComponent(key)}','${date}')">＋希望を追加</button></div>`:'';
+      return `<div class="req-detail-day"><div class="req-detail-top"><div><div class="req-detail-date">${d.getMonth()+1}/${d.getDate()}(${wd[d.getDay()]})</div><div class="req-detail-shift" style="color:#94a3b8">未提出</div></div></div>${addBtn}</div>`;
+    }
     const meta=requestMeta(r.memo),change=meta.change;
     const changeBox=change?.state==='open'?`<div class="req-change-box"><b>📩 管理者から変更のお願い</b><small>希望：${esc(change.shift||'相談')}</small>${change.note?`<small>内容：${esc(change.note)}</small>`:''}</div>`:'';
     let actions='';
-    if(isAdmin())actions=`<div class="req-detail-actions"><button class="btn secondary small" onclick="askRequestChange('${r.id}')">変更をお願い</button>${r.status==='pending'?`<button class="btn green small" onclick="setReqStatus('${r.id}','approved');hide('requestPersonModal')">承認</button>`:''}${change?.state==='open'?`<button class="btn secondary small" onclick="clearRequestChange('${r.id}')">依頼を取り消す</button>`:''}</div>`;
+    if(isAdmin())actions=`<div class="req-detail-actions"><button class="btn blue small" onclick="adminEditRequest('${r.id}')">✏️ 直接編集</button><button class="btn secondary small" onclick="askRequestChange('${r.id}')">変更をお願い</button>${r.status==='pending'?`<button class="btn green small" onclick="setReqStatus('${r.id}','approved');hide('requestPersonModal')">承認</button>`:''}${change?.state==='open'?`<button class="btn secondary small" onclick="clearRequestChange('${r.id}')">依頼を取り消す</button>`:''}</div>`;
     return `<div class="req-detail-day"><div class="req-detail-top"><div><div class="req-detail-date">${d.getMonth()+1}/${d.getDate()}(${wd[d.getDay()]})</div><div class="req-detail-shift">${esc(requestToShiftText(r))}</div>${meta.memo?`<div class="req-staff-sub">メモ：${esc(meta.memo)}</div>`:''}</div><span class="badge ${statusClass(r.status)}">${esc(statusLabel(r.status))}</span></div>${changeBox}${actions}</div>`;
   }).join('');
   show('requestPersonModal');
+};
+
+
+function parseAdminShiftInput(input){
+  const raw=(input||'').trim();
+  if(!raw)return null;
+  if(/^(休|休み|off)$/i.test(raw))return {request_type:'off',start_text:null,end_text:null};
+  const normalized=raw.replace(/～/g,'〜').replace(/-/g,'〜').replace(/：/g,':').replace(/\s/g,'');
+  const parts=normalized.split('〜');
+  if(parts.length!==2||!parts[0])return null;
+  let start=parts[0].replace(':00','');
+  let end=(parts[1]||'L').replace(':00','');
+  if(/^(last|l)$/i.test(end))end='L';
+  if(!/^\d{1,2}(?::\d{2})?$/.test(start))return null;
+  if(end!=='L'&&!/^\d{1,2}(?::\d{2})?$/.test(end))return null;
+  return {request_type:'prefer',start_text:start,end_text:end};
+}
+function requestPersonKey(r){
+  const st=requestStaff(r);return st?String(st.id):`email:${r.user_email||''}`;
+}
+window.adminEditRequest=async function(id){
+  if(!isAdmin())return;
+  const r=requests.find(x=>String(x.id)===String(id));if(!r)return;
+  const current=requestToShiftText(r);
+  const input=prompt('希望時間を直接変更します。\n例：18〜5 / 24〜L / 休み',current);
+  if(input===null)return;
+  const parsed=parseAdminShiftInput(input);
+  if(!parsed)return alert('入力形式を確認してください。\n例：18〜5 / 24〜L / 休み');
+  const meta=requestMeta(r.memo);
+  const memo=encodeRequestMemo(meta.stores,meta.memo,meta.staffId,meta.moveOk,null);
+  const {error}=await supabaseClient.from('shift_requests').update({...parsed,memo,status:'approved'}).eq('id',id);
+  if(error)return alert('変更できませんでした。\n'+error.message);
+  const key=requestPersonKey(r);
+  await loadAll();openRequestPerson(encodeURIComponent(key));
+};
+window.adminAddRequest=async function(encodedKey,date){
+  if(!isAdmin())return;
+  const key=decodeURIComponent(encodedKey);
+  const st=staff.find(x=>String(x.id)===String(key));
+  if(!st)return alert('スタッフ情報を確認できませんでした。');
+  const input=prompt(`${st.name} / ${date} の希望を追加します。\n例：18〜5 / 24〜L / 休み`,'18〜5');
+  if(input===null)return;
+  const parsed=parseAdminShiftInput(input);
+  if(!parsed)return alert('入力形式を確認してください。\n例：18〜5 / 24〜L / 休み');
+  const row={user_id:currentUser.id,user_email:currentUser.email||null,date,...parsed,memo:encodeRequestMemo([],'',st.id,false,null),status:'approved'};
+  const {error}=await supabaseClient.from('shift_requests').insert(row);
+  if(error)return alert('追加できませんでした。\n'+error.message);
+  await loadAll();openRequestPerson(encodeURIComponent(String(st.id)));
 };
 
 window.askRequestChange=async function(id){
