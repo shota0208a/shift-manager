@@ -234,7 +234,7 @@ thead th:first-child{z-index:10}
     <div style="display:flex;align-items:center;gap:8px">
       <div>
         <h1>SHIFT MANAGER</h1>
-        <div class="sub" id="storeTitle">共有シフト管理 V13.6 FILL CUSTOM TIME</div>
+        <div class="sub" id="storeTitle">共有シフト管理 V13.7 REQUEST MATCH + FILL L</div>
       </div>
       <div class="topright">
         <span class="role-pill" id="rolePill"></span>
@@ -426,8 +426,8 @@ thead th:first-child{z-index:10}
     <h2 id="fillStaffTitle">穴埋め要員設定</h2>
     <div class="simple-help" style="margin-bottom:12px">通常の希望だけで人数が足りない時に、自動シフトがこのスタッフを候補にします。<b>休み提出の日には入れません。</b></div>
     <label class="checkrow"><input id="fillEnabled" type="checkbox"> 穴埋め要員として使う</label>
-    <div class="field"><label>第1候補（自由入力）</label><input id="fillTimeRange1" type="text" inputmode="numeric" placeholder="例：18〜5" value="18〜5"><small>例：18〜5 / 24〜5 / 18〜23 / 6〜9 / 6〜11</small></div>
-    <div class="field"><label>第2候補（自由入力）</label><input id="fillTimeRange2" type="text" inputmode="numeric" placeholder="例：24〜5"><small>不要なら空欄でOK</small></div>
+    <div class="field"><label>第1候補（自由入力）</label><input id="fillTimeRange1" type="text" inputmode="text" placeholder="例：18〜5" value="18〜5"><small>例：18〜5 / 24〜5 / 18〜23 / 6〜9 / 6〜11</small></div>
+    <div class="field"><label>第2候補（自由入力）</label><input id="fillTimeRange2" type="text" inputmode="text" placeholder="例：24〜5"><small>不要なら空欄でOK</small></div>
     <div class="field"><label>1週間で穴埋めに使う上限</label><select id="fillMaxWeekly">
       <option value="1">週1回まで</option><option value="2" selected>週2回まで</option><option value="3">週3回まで</option><option value="4">週4回まで</option><option value="5">週5回まで</option><option value="6">週6回まで</option><option value="7">上限なし</option>
     </select></div>
@@ -594,9 +594,9 @@ function fillRangeLabel(v){
   const legacy={'18-5':'18〜5','24-5':'24〜5','18-23':'18〜23','6-9':'6〜9','6-11':'6〜11','18-L':'18〜5','23-L':'24〜5','24-L':'24〜5','5-L':'6〜11'};
   return legacy[raw]||raw.replace('-', '〜');
 }
-function parseFillHour(x,isStart){
+function parseFillHour(x,isStart,cfg){
   let t=String(x||'').trim().toUpperCase();
-  if(t==='L'||t==='LAST')return null;
+  if(t==='L'||t==='LAST')return isStart?null:cfg.last;
   const m=t.match(/^(\d{1,2})(?::(\d{2}))?$/);if(!m)return null;
   let h=Number(m[1]),min=Number(m[2]||0);
   if(min!==0||h<0||h>24)return null;
@@ -608,7 +608,7 @@ function fillRangeToHours(v,cfg){
   const legacy={'18-5':'18〜5','24-5':'24〜5','18-23':'18〜23','6-9':'6〜9','6-11':'6〜11','18-L':'18〜5','23-L':'24〜5','24-L':'24〜5','5-L':'6〜11'};
   raw=legacy[raw]||raw.replace('-', '〜');
   const parts=raw.split('〜');if(parts.length!==2)return null;
-  let start=parseFillHour(parts[0],true),end=parseFillHour(parts[1],false);
+  let start=parseFillHour(parts[0],true,cfg),end=parseFillHour(parts[1],false,cfg);
   if(start==null||end==null)return null;
   if(end<=start)end+=24;
   start=Math.max(start,cfg.open);end=Math.min(end,cfg.last);
@@ -747,7 +747,7 @@ function renderWeek(){
   days.forEach(d=>h+=`<th class="${d.getDay()===6?'sat':d.getDay()===0?'sun':''}">${d.getMonth()+1}/${d.getDate()}<br>${'日月火水木金土'[d.getDay()]}</th>`);
   h+='</tr></thead><tbody>';
   staff.filter(x=>x.active!==false).forEach(s=>{
-    h+=`<tr><td class="staff-cell">${esc(s.name)}</td>`;
+    h+=`<tr><td class="staff-cell">${isAdmin()?`<button onclick="openWeekStaffComparison('${s.id}')" style="border:0;background:none;padding:0;font:inherit;font-weight:900;color:inherit;text-decoration:underline;text-decoration-color:#cbd5e1;text-underline-offset:4px;cursor:pointer">${esc(s.name)}</button>`:esc(s.name)}</td>`;
     days.forEach(d=>{
       const sh=shifts.find(x=>x.staff_id===s.id&&x.date===fmt(d));
       const cls=d.getDay()===6?'sat':d.getDay()===0?'sun':'';
@@ -759,6 +759,11 @@ function renderWeek(){
   });
   h+='</tbody>';$('weekTable').innerHTML=h;
 }
+window.openWeekStaffComparison=function(staffId){
+  requestWeekStart=new Date(weekStart);
+  openRequestPerson(encodeURIComponent(String(staffId)));
+};
+
 window.openShift=(staffId,date)=>{
   if(!isAdmin())return;
   const s=staff.find(x=>x.id===staffId), sh=shifts.find(x=>x.staff_id===staffId&&x.date===date);
@@ -1363,7 +1368,10 @@ window.openRequestPerson=function(encodedKey){
   const wd=['日','月','火','水','木','金','土'];
   $('requestPersonTitle').textContent=name+' の希望';
   const openChanges=personRows.filter(r=>requestMeta(r.memo).change?.state==='open').length;
-  $('requestPersonSummary').innerHTML=`${requestWeekStart.getMonth()+1}/${requestWeekStart.getDate()}〜${reqWeekEnd().getMonth()+1}/${reqWeekEnd().getDate()}　提出 ${new Set(personRows.map(r=>r.date)).size}/7日${openChanges?`<br><b style="color:#c2410c">変更依頼 ${openChanges}件あり</b>`:''}`;
+  const personStaff=key.startsWith('email:')?staff.find(x=>(x.email||'')===key.slice(6)):staff.find(x=>String(x.id)===String(key));
+  const scheduledDays=personStaff?days.filter(d=>shifts.some(x=>String(x.staff_id)===String(personStaff.id)&&x.date===fmt(d))).length:0;
+  const submittedDays=new Set(personRows.map(r=>r.date)).size;
+  $('requestPersonSummary').innerHTML=`${requestWeekStart.getMonth()+1}/${requestWeekStart.getDate()}〜${reqWeekEnd().getMonth()+1}/${reqWeekEnd().getDate()}　希望 ${submittedDays}/7日<br><b>実際のシフト ${scheduledDays}日 / 希望 ${submittedDays}日</b>${openChanges?`<br><b style="color:#c2410c">変更依頼 ${openChanges}件あり</b>`:''}`;
   $('requestPersonDays').innerHTML=days.map(d=>{
     const date=fmt(d),r=byDate.get(date);
     if(!r){
@@ -1371,10 +1379,12 @@ window.openRequestPerson=function(encodedKey){
       return `<div class="req-detail-day"><div class="req-detail-top"><div><div class="req-detail-date">${d.getMonth()+1}/${d.getDate()}(${wd[d.getDay()]})</div><div class="req-detail-shift" style="color:#94a3b8">未提出</div></div></div>${addBtn}</div>`;
     }
     const meta=requestMeta(r.memo),change=meta.change;
+    const actual=personStaff?shifts.find(x=>String(x.staff_id)===String(personStaff.id)&&x.date===date):null;
+    const actualBox=`<div style="margin-top:7px;padding:8px 10px;border-radius:10px;background:${actual?'#ecfdf5':'#f8fafc'};color:${actual?'#047857':'#64748b'};font-size:13px;font-weight:900">${actual?`✓ シフト反映：${esc(actual.display_text)}`:'— この日はシフト未反映'}</div>`;
     const changeBox=change?.state==='open'?`<div class="req-change-box"><b>📩 管理者から変更のお願い</b><small>希望：${esc(change.shift||'相談')}</small>${change.note?`<small>内容：${esc(change.note)}</small>`:''}</div>`:'';
     let actions='';
     if(isAdmin())actions=`<div class="req-detail-actions"><button class="btn blue small" onclick="adminEditRequest('${r.id}')">✏️ 直接編集</button><button class="btn secondary small" onclick="askRequestChange('${r.id}')">変更をお願い</button>${r.status==='pending'?`<button class="btn green small" onclick="setReqStatus('${r.id}','approved');hide('requestPersonModal')">承認</button>`:''}${change?.state==='open'?`<button class="btn secondary small" onclick="clearRequestChange('${r.id}')">依頼を取り消す</button>`:''}</div>`;
-    return `<div class="req-detail-day"><div class="req-detail-top"><div><div class="req-detail-date">${d.getMonth()+1}/${d.getDate()}(${wd[d.getDay()]})</div><div class="req-detail-shift">${esc(requestToShiftText(r))}</div>${meta.memo?`<div class="req-staff-sub">メモ：${esc(meta.memo)}</div>`:''}</div><span class="badge ${statusClass(r.status)}">${esc(statusLabel(r.status))}</span></div>${changeBox}${actions}</div>`;
+    return `<div class="req-detail-day"><div class="req-detail-top"><div><div class="req-detail-date">${d.getMonth()+1}/${d.getDate()}(${wd[d.getDay()]})</div><div class="req-detail-shift">${esc(requestToShiftText(r))}</div>${meta.memo?`<div class="req-staff-sub">メモ：${esc(meta.memo)}</div>`:''}</div><span class="badge ${statusClass(r.status)}">${esc(statusLabel(r.status))}</span></div>${actualBox}${changeBox}${actions}</div>`;
   }).join('');
   show('requestPersonModal');
 };
