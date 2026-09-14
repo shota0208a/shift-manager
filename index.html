@@ -234,7 +234,7 @@ thead th:first-child{z-index:10}
     <div style="display:flex;align-items:center;gap:8px">
       <div>
         <h1>SHIFT MANAGER</h1>
-        <div class="sub" id="storeTitle">共有シフト管理 V13.5 FILL 2CHOICE</div>
+        <div class="sub" id="storeTitle">共有シフト管理 V13.6 FILL CUSTOM TIME</div>
       </div>
       <div class="topright">
         <span class="role-pill" id="rolePill"></span>
@@ -426,21 +426,8 @@ thead th:first-child{z-index:10}
     <h2 id="fillStaffTitle">穴埋め要員設定</h2>
     <div class="simple-help" style="margin-bottom:12px">通常の希望だけで人数が足りない時に、自動シフトがこのスタッフを候補にします。<b>休み提出の日には入れません。</b></div>
     <label class="checkrow"><input id="fillEnabled" type="checkbox"> 穴埋め要員として使う</label>
-    <div class="field"><label>第1候補</label><select id="fillTimeRange1">
-      <option value="18-5">18〜5</option>
-      <option value="24-5">24〜5</option>
-      <option value="18-23">18〜23</option>
-      <option value="6-9">6〜9</option>
-      <option value="6-11">6〜11</option>
-    </select></div>
-    <div class="field"><label>第2候補</label><select id="fillTimeRange2">
-      <option value="">指定なし</option>
-      <option value="18-5">18〜5</option>
-      <option value="24-5">24〜5</option>
-      <option value="18-23">18〜23</option>
-      <option value="6-9">6〜9</option>
-      <option value="6-11">6〜11</option>
-    </select></div>
+    <div class="field"><label>第1候補（自由入力）</label><input id="fillTimeRange1" type="text" inputmode="numeric" placeholder="例：18〜5" value="18〜5"><small>例：18〜5 / 24〜5 / 18〜23 / 6〜9 / 6〜11</small></div>
+    <div class="field"><label>第2候補（自由入力）</label><input id="fillTimeRange2" type="text" inputmode="numeric" placeholder="例：24〜5"><small>不要なら空欄でOK</small></div>
     <div class="field"><label>1週間で穴埋めに使う上限</label><select id="fillMaxWeekly">
       <option value="1">週1回まで</option><option value="2" selected>週2回まで</option><option value="3">週3回まで</option><option value="4">週4回まで</option><option value="5">週5回まで</option><option value="6">週6回まで</option><option value="7">上限なし</option>
     </select></div>
@@ -599,21 +586,39 @@ async function saveFillStaffSettings(settings){
   const q=existing?supabaseClient.from('events').update(row).eq('id',existing.id):supabaseClient.from('events').insert(row);
   const {error}=await q;if(error)throw error;
 }
-function fillRangeLabel(v){return {'18-5':'18〜5','24-5':'24〜5','18-23':'18〜23','6-9':'6〜9','6-11':'6〜11'}[v]||''}
+function normalizeFillRange(v){
+  return String(v||'').trim().replace(/[～~ー−–—]/g,'〜').replace(/\s+/g,'').replace(/:/g,':');
+}
+function fillRangeLabel(v){
+  const raw=normalizeFillRange(v);
+  const legacy={'18-5':'18〜5','24-5':'24〜5','18-23':'18〜23','6-9':'6〜9','6-11':'6〜11','18-L':'18〜5','23-L':'24〜5','24-L':'24〜5','5-L':'6〜11'};
+  return legacy[raw]||raw.replace('-', '〜');
+}
+function parseFillHour(x,isStart){
+  let t=String(x||'').trim().toUpperCase();
+  if(t==='L'||t==='LAST')return null;
+  const m=t.match(/^(\d{1,2})(?::(\d{2}))?$/);if(!m)return null;
+  let h=Number(m[1]),min=Number(m[2]||0);
+  if(min!==0||h<0||h>24)return null;
+  if(h<12)h+=24;
+  return h;
+}
 function fillRangeToHours(v,cfg){
-  const map={'18-5':[18,29],'24-5':[24,29],'18-23':[18,23],'6-9':[30,33],'6-11':[30,35]};
-  const pair=map[v];if(!pair)return null;
-  const start=Math.max(pair[0],cfg.open),end=Math.min(pair[1],cfg.last);
-  return end>start?{start,end}:null;
+  let raw=normalizeFillRange(v);
+  const legacy={'18-5':'18〜5','24-5':'24〜5','18-23':'18〜23','6-9':'6〜9','6-11':'6〜11','18-L':'18〜5','23-L':'24〜5','24-L':'24〜5','5-L':'6〜11'};
+  raw=legacy[raw]||raw.replace('-', '〜');
+  const parts=raw.split('〜');if(parts.length!==2)return null;
+  let start=parseFillHour(parts[0],true),end=parseFillHour(parts[1],false);
+  if(start==null||end==null)return null;
+  if(end<=start)end+=24;
+  start=Math.max(start,cfg.open);end=Math.min(end,cfg.last);
+  return end>start?{start,end,fillDisplay:raw}:null;
 }
 function fillCandidates(setting,cfg){
   let ranges=[];
   if(Array.isArray(setting?.ranges))ranges=setting.ranges;
-  else if(setting?.range){
-    const legacy={'18-L':'18-5','23-L':'24-5','24-L':'24-5','5-L':'6-11'};
-    ranges=[legacy[setting.range]||setting.range];
-  }
-  if(!ranges.length)ranges=['18-5'];
+  else if(setting?.range){ranges=[setting.range];}
+  if(!ranges.length)ranges=['18〜5'];
   return ranges.slice(0,2).map(v=>{const h=fillRangeToHours(v,cfg);return h?{...h,fillRange:v}:null}).filter(Boolean);
 }
 
@@ -832,7 +837,7 @@ function renderStaffManagement(){
     return `<div class="staff-manage-row">
       <div class="staff-manage-main">
         <b>${esc(s.name)}${manager?'<span class="manager-badge">MANAGER</span>':''}${fillOn?'<span class="fill-badge">穴埋め</span>':''}</b>
-        <small>${esc(s.email||'メール未登録')} / ${s.active===false?'非表示':'表示中'}${fillOn?` / ${fillRangeLabel(fs.range)}・週${Number(fs.maxWeekly)||2}回まで`:''}</small>
+        <small>${esc(s.email||'メール未登録')} / ${s.active===false?'非表示':'表示中'}${fillOn?` / ${(Array.isArray(fs.ranges)?fs.ranges.map(fillRangeLabel).filter(Boolean).join(' / '):fillRangeLabel(fs.range))}・週${Number(fs.maxWeekly)||2}回まで`:''}</small>
       </div>
       <div class="staff-manage-actions">
         <button class="btn secondary small" onclick="editStaffName('${s.id}')">名前変更</button>
@@ -908,17 +913,18 @@ window.openFillStaff=(id)=>{
   $('fillStaffTitle').textContent=`${st.name} / 穴埋め要員設定`;
   $('fillEnabled').checked=!!fs.enabled;
   let ranges=Array.isArray(fs.ranges)?fs.ranges.slice(0,2):[];
-  if(!ranges.length&&fs.range){const legacy={'18-L':'18-5','23-L':'24-5','24-L':'24-5','5-L':'6-11'};ranges=[legacy[fs.range]||'18-5'];}
-  $('fillTimeRange1').value=ranges[0]||'18-5';
-  $('fillTimeRange2').value=ranges[1]||'';
+  if(!ranges.length&&fs.range){const legacy={'18-L':'18〜5','23-L':'24〜5','24-L':'24〜5','5-L':'6〜11'};ranges=[legacy[fs.range]||fillRangeLabel(fs.range)||'18〜5'];}
+  $('fillTimeRange1').value=fillRangeLabel(ranges[0])||'18〜5';
+  $('fillTimeRange2').value=fillRangeLabel(ranges[1])||'';
   $('fillMaxWeekly').value=String(fs.maxWeekly||2);
   show('fillStaffModal');
 };
 $('saveFillStaffBtn').onclick=async()=>{
   if(!isAdmin()||!activeFillStaffId)return;
   const all=readFillStaffSettings();
-  const r1=$('fillTimeRange1').value,r2=$('fillTimeRange2').value;
+  const r1=fillRangeLabel($('fillTimeRange1').value),r2=fillRangeLabel($('fillTimeRange2').value);
   const ranges=[r1,r2].filter((v,i,a)=>v&&a.indexOf(v)===i).slice(0,2);
+  for(const r of ranges){if(!fillRangeToHours(r,{open:18,last:35}))return alert('時間は「18〜5」のように入力してください。');}
   all[activeFillStaffId]={enabled:$('fillEnabled').checked,ranges,maxWeekly:Number($('fillMaxWeekly').value||2)};
   try{
     await saveFillStaffSettings(all);hide('fillStaffModal');await loadAll();renderStaffManagement();
@@ -1067,7 +1073,7 @@ function coverageForAssignments(as,cfg){const cov={};for(let h=cfg.open;h<cfg.la
 function deficits(cov,cfg){const a=[];for(let h=cfg.open;h<cfg.last;h++){const d=requiredAt(h,cfg)-(cov[h]||0);if(d>0)a.push({h,d})}return a}
 function chooseBestCandidate(people,as,cfg){const cov=coverageForAssignments(as,cfg);let best=null;for(const p of people){if(as.some(a=>a.staff.id===p.staff.id))continue;for(const c of p.candidates){let benefit=0,extra=0;for(let h=c.start;h<c.end;h++){if(h<cfg.open||h>=cfg.last)continue;const need=Math.max(0,requiredAt(h,cfg)-(cov[h]||0));if(need>0)benefit+=need;else extra++}if(!benefit)continue;const score=benefit*100-extra*3-(c.end-c.start);if(!best||score>best.score)best={...c,staff:p.staff,request:p.request,fixed:false,score}}}return best}
 function optimizeAssignments(as,people,cfg){for(const a of as.filter(x=>!x.fixed)){const p=people.find(x=>x.staff.id===a.staff.id);if(!p)continue;for(const c of p.candidates.slice().sort((x,y)=>(x.end-x.start)-(y.end-y.start))){const test=as.map(x=>x===a?{...a,start:c.start,end:c.end}:x);if(deficits(coverageForAssignments(test,cfg),cfg).length===0){a.start=c.start;a.end=c.end;break}}}}
-function formatAssignment(a,cfg){return `${displayHour(a.start,cfg.last)}〜${displayHour(a.end,cfg.last)} NP`}
+function formatAssignment(a,cfg){if(a.fill&&a.fillDisplay)return `${a.fillDisplay} NP`;return `${displayHour(a.start,cfg.last)}〜${displayHour(a.end,cfg.last)} NP`}
 const AUTO_MEMORY_KEY='shiftManagerAutoConfigV12';
 const AUTO_MEMORY_EVENT='__SHIFT_MANAGER_AUTO_CONFIG__';
 const TEST_NAMES_KEY='shiftManagerTestNamesV12';
