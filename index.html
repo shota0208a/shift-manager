@@ -234,7 +234,7 @@ thead th:first-child{z-index:10}
     <div style="display:flex;align-items:center;gap:8px">
       <div>
         <h1>SHIFT MANAGER</h1>
-        <div class="sub" id="storeTitle">共有シフト管理 V13.8 BALANCED AUTO</div>
+        <div class="sub" id="storeTitle">共有シフト管理 V13.9 SYNC FIX</div>
       </div>
       <div class="topright">
         <span class="role-pill" id="rolePill"></span>
@@ -803,7 +803,7 @@ $('shiftValue').addEventListener('input',()=>document.querySelectorAll('[data-sh
 $('saveShiftBtn').onclick=async()=>{
   if(!isAdmin()||!activeShift)return;
   const value=$('shiftValue').value.trim();
-  const role=$('shiftRole').value||'';
+  const role=$('shiftRole').value||'MANUAL';
   const btn=$('saveShiftBtn');
   const old=btn.textContent;
   btn.disabled=true;btn.textContent='保存中…';
@@ -1287,6 +1287,15 @@ async function runAutoSchedule(){
   if(lowest.length)warnings.unshift(`希望バランス：${lowest.map(x=>`${x.name} ${x.assigned}/${x.wanted}日`).join(' / ')}`);
   if(!confirm(`${allAssignments.length}件のNPシフト案を作成します。${warnings.length?`\n不足・確認事項 ${warnings.length}件あり`:''}`))return;
 
+  // 自動作成をやり直した時、前回の自動シフトが残らないよう週内を先に整理する。
+  // V13.9以降の手動入力(MANUAL)は残し、それ以外のNP自動シフトは作り直す。
+  const weekStartStr=fmt(requestWeekStart),weekEndStr=fmt(addDays(requestWeekStart,6));
+  const staleIds=shifts.filter(x=>x.date>=weekStartStr&&x.date<=weekEndStr&&String(x.display_text||'').match(/(?:^|\s)NP(?:\s|$)/)&&x.role!=='MANUAL').map(x=>x.id).filter(Boolean);
+  if(staleIds.length){
+    const clean=await supabaseClient.from('shifts').delete().in('id',staleIds);
+    if(clean.error)return alert('前回の自動シフト整理に失敗しました: '+clean.error.message);
+  }
+
   // staff_id + date はDBで一意。保存前に同じスタッフ・同じ日の既存シフトを確実に消してからINSERTする。
   // これにより手動編集済みシフトや旧形式の表示文字が残っていても duplicate key にならない。
   const uniqueAssignments=[];
@@ -1300,7 +1309,7 @@ async function runAutoSchedule(){
   for(const a of uniqueAssignments){
     const del=await supabaseClient.from('shifts').delete().eq('staff_id',a.staff.id).eq('date',a.cfg.date);
     if(del.error)return alert('既存シフトの整理に失敗しました: '+del.error.message);
-    const row={staff_id:a.staff.id,date:a.cfg.date,display_text:formatAssignment(a,a.cfg),role:a.fixed?'OPEN':a.fill?'FILL':''};
+    const row={staff_id:a.staff.id,date:a.cfg.date,display_text:formatAssignment(a,a.cfg),role:a.fixed?'OPEN':a.fill?'FILL':'AUTO'};
     const ins=await supabaseClient.from('shifts').insert(row);
     if(ins.error)return alert('シフト保存に失敗しました: '+ins.error.message);
   }
@@ -1429,6 +1438,25 @@ function parseAdminShiftInput(input){
   if(end!=='L'&&!/^\d{1,2}(?::\d{2})?$/.test(end))return null;
   return {request_type:'prefer',start_text:start,end_text:end};
 }
+async function syncExistingShiftFromRequest(r,parsed){
+  // 希望変更後、すでにその日に実シフトがある場合は同じ内容へ即反映する。
+  // 未割当の希望を勝手にシフト化はせず、自動作成のバランス判定に任せる。
+  const st=requestStaff(r);if(!st)return;
+  const existing=shifts.find(x=>String(x.staff_id)===String(st.id)&&x.date===r.date);
+  if(!existing)return;
+  if(parsed.request_type==='off'){
+    const del=await supabaseClient.from('shifts').delete().eq('staff_id',st.id).eq('date',r.date);
+    if(del.error)throw del.error;
+    return;
+  }
+  const start=normTime(parsed.start_text||'');
+  const end=normTime(parsed.end_text||'L',true)||'L';
+  const oldText=String(existing.display_text||'').trim();
+  const suffix=(oldText.match(/\s+(NP|NL|MT|33)(?:\s+(?:NP|NL|MT|33))*\s*$/)||[])[0]||' NP';
+  const display=`${start}〜${end}${suffix}`.trim();
+  const upd=await supabaseClient.from('shifts').update({display_text:display}).eq('staff_id',st.id).eq('date',r.date);
+  if(upd.error)throw upd.error;
+}
 function requestPersonKey(r){
   const st=requestStaff(r);return st?String(st.id):`email:${r.user_email||''}`;
 }
@@ -1457,6 +1485,7 @@ $('saveRequestEditBtn').onclick=async()=>{
   const memo=encodeRequestMemo(meta.stores,meta.memo,meta.staffId,meta.moveOk,null);
   const {error}=await supabaseClient.from('shift_requests').update({...parsed,memo,status:'approved'}).eq('id',activeRequestEditId);
   if(error)return alert('変更できませんでした。\n'+error.message);
+  try{await syncExistingShiftFromRequest(r,parsed)}catch(e){return alert('希望は保存されましたが、実シフトへの反映に失敗しました。\n'+(e?.message||String(e)))}
   const key=requestPersonKey(r);
   hide('requestEditModal');
   await loadAll();openRequestPerson(encodeURIComponent(key));
