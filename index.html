@@ -234,7 +234,7 @@ thead th:first-child{z-index:10}
     <div style="display:flex;align-items:center;gap:8px">
       <div>
         <h1>SHIFT MANAGER</h1>
-        <div class="sub" id="storeTitle">共有シフト管理 V13.4 DUPLICATE FIX</div>
+        <div class="sub" id="storeTitle">共有シフト管理 V13.5 FILL 2CHOICE</div>
       </div>
       <div class="topright">
         <span class="role-pill" id="rolePill"></span>
@@ -426,11 +426,20 @@ thead th:first-child{z-index:10}
     <h2 id="fillStaffTitle">穴埋め要員設定</h2>
     <div class="simple-help" style="margin-bottom:12px">通常の希望だけで人数が足りない時に、自動シフトがこのスタッフを候補にします。<b>休み提出の日には入れません。</b></div>
     <label class="checkrow"><input id="fillEnabled" type="checkbox"> 穴埋め要員として使う</label>
-    <div class="field"><label>穴埋めできる時間帯</label><select id="fillTimeRange">
-      <option value="18-L">18〜LAST</option>
-      <option value="23-L">23〜LAST</option>
-      <option value="24-L">24〜LAST</option>
-      <option value="5-L">5〜LAST</option>
+    <div class="field"><label>第1候補</label><select id="fillTimeRange1">
+      <option value="18-5">18〜5</option>
+      <option value="24-5">24〜5</option>
+      <option value="18-23">18〜23</option>
+      <option value="6-9">6〜9</option>
+      <option value="6-11">6〜11</option>
+    </select></div>
+    <div class="field"><label>第2候補</label><select id="fillTimeRange2">
+      <option value="">指定なし</option>
+      <option value="18-5">18〜5</option>
+      <option value="24-5">24〜5</option>
+      <option value="18-23">18〜23</option>
+      <option value="6-9">6〜9</option>
+      <option value="6-11">6〜11</option>
     </select></div>
     <div class="field"><label>1週間で穴埋めに使う上限</label><select id="fillMaxWeekly">
       <option value="1">週1回まで</option><option value="2" selected>週2回まで</option><option value="3">週3回まで</option><option value="4">週4回まで</option><option value="5">週5回まで</option><option value="6">週6回まで</option><option value="7">上限なし</option>
@@ -590,14 +599,22 @@ async function saveFillStaffSettings(settings){
   const q=existing?supabaseClient.from('events').update(row).eq('id',existing.id):supabaseClient.from('events').insert(row);
   const {error}=await q;if(error)throw error;
 }
-function fillRangeLabel(v){return {'18-L':'18〜L','23-L':'23〜L','24-L':'24〜L','5-L':'5〜L'}[v]||'18〜L'}
-function fillAvailability(setting,cfg){
-  const range=setting?.range||'18-L';
-  const starts={'18-L':18,'23-L':23,'24-L':24,'5-L':29};
-  let start=starts[range]??18;
-  start=Math.max(start,cfg.open);
-  const end=cfg.last;
+function fillRangeLabel(v){return {'18-5':'18〜5','24-5':'24〜5','18-23':'18〜23','6-9':'6〜9','6-11':'6〜11'}[v]||''}
+function fillRangeToHours(v,cfg){
+  const map={'18-5':[18,29],'24-5':[24,29],'18-23':[18,23],'6-9':[30,33],'6-11':[30,35]};
+  const pair=map[v];if(!pair)return null;
+  const start=Math.max(pair[0],cfg.open),end=Math.min(pair[1],cfg.last);
   return end>start?{start,end}:null;
+}
+function fillCandidates(setting,cfg){
+  let ranges=[];
+  if(Array.isArray(setting?.ranges))ranges=setting.ranges;
+  else if(setting?.range){
+    const legacy={'18-L':'18-5','23-L':'24-5','24-L':'24-5','5-L':'6-11'};
+    ranges=[legacy[setting.range]||setting.range];
+  }
+  if(!ranges.length)ranges=['18-5'];
+  return ranges.slice(0,2).map(v=>{const h=fillRangeToHours(v,cfg);return h?{...h,fillRange:v}:null}).filter(Boolean);
 }
 
 function initConfig(){
@@ -890,14 +907,19 @@ window.openFillStaff=(id)=>{
   const fs=readFillStaffSettings()[activeFillStaffId]||{};
   $('fillStaffTitle').textContent=`${st.name} / 穴埋め要員設定`;
   $('fillEnabled').checked=!!fs.enabled;
-  $('fillTimeRange').value=fs.range||'18-L';
+  let ranges=Array.isArray(fs.ranges)?fs.ranges.slice(0,2):[];
+  if(!ranges.length&&fs.range){const legacy={'18-L':'18-5','23-L':'24-5','24-L':'24-5','5-L':'6-11'};ranges=[legacy[fs.range]||'18-5'];}
+  $('fillTimeRange1').value=ranges[0]||'18-5';
+  $('fillTimeRange2').value=ranges[1]||'';
   $('fillMaxWeekly').value=String(fs.maxWeekly||2);
   show('fillStaffModal');
 };
 $('saveFillStaffBtn').onclick=async()=>{
   if(!isAdmin()||!activeFillStaffId)return;
   const all=readFillStaffSettings();
-  all[activeFillStaffId]={enabled:$('fillEnabled').checked,range:$('fillTimeRange').value,maxWeekly:Number($('fillMaxWeekly').value||2)};
+  const r1=$('fillTimeRange1').value,r2=$('fillTimeRange2').value;
+  const ranges=[r1,r2].filter((v,i,a)=>v&&a.indexOf(v)===i).slice(0,2);
+  all[activeFillStaffId]={enabled:$('fillEnabled').checked,ranges,maxWeekly:Number($('fillMaxWeekly').value||2)};
   try{
     await saveFillStaffSettings(all);hide('fillStaffModal');await loadAll();renderStaffManagement();
   }catch(e){alert('穴埋め設定を保存できませんでした。\n'+(e?.message||String(e)))}
@@ -1205,8 +1227,8 @@ async function runAutoSchedule(){
         if(used>=max)continue;
         const explicitOff=dayReqs.some(r=>String(requestStaff(r)?.id)===String(st.id)&&r.request_type==='off');
         if(explicitOff)continue;
-        const av=fillAvailability(fs,cfg);if(!av)continue;
-        fillPeople.push({staff:st,request:null,av,candidates:candidateTemplates(av,cfg)});
+        const candidates=fillCandidates(fs,cfg);if(!candidates.length)continue;
+        fillPeople.push({staff:st,request:null,candidates});
       }
       const best=chooseBestCandidate(fillPeople,as,cfg);
       if(!best)break;
