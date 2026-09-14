@@ -234,7 +234,7 @@ thead th:first-child{z-index:10}
     <div style="display:flex;align-items:center;gap:8px">
       <div>
         <h1>SHIFT MANAGER</h1>
-        <div class="sub" id="storeTitle">共有シフト管理 V13.7 REQUEST MATCH + FILL L</div>
+        <div class="sub" id="storeTitle">共有シフト管理 V13.8 BALANCED AUTO</div>
       </div>
       <div class="topright">
         <span class="role-pill" id="rolePill"></span>
@@ -1076,7 +1076,7 @@ function candidateTemplates(av,cfg){
 }
 function coverageForAssignments(as,cfg){const cov={};for(let h=cfg.open;h<cfg.last;h++)cov[h]=0;for(const a of as)for(let h=Math.max(cfg.open,a.start);h<Math.min(cfg.last,a.end);h++)cov[h]=(cov[h]||0)+1;return cov}
 function deficits(cov,cfg){const a=[];for(let h=cfg.open;h<cfg.last;h++){const d=requiredAt(h,cfg)-(cov[h]||0);if(d>0)a.push({h,d})}return a}
-function chooseBestCandidate(people,as,cfg){const cov=coverageForAssignments(as,cfg);let best=null;for(const p of people){if(as.some(a=>a.staff.id===p.staff.id))continue;for(const c of p.candidates){let benefit=0,extra=0;for(let h=c.start;h<c.end;h++){if(h<cfg.open||h>=cfg.last)continue;const need=Math.max(0,requiredAt(h,cfg)-(cov[h]||0));if(need>0)benefit+=need;else extra++}if(!benefit)continue;const score=benefit*100-extra*3-(c.end-c.start);if(!best||score>best.score)best={...c,staff:p.staff,request:p.request,fixed:false,score}}}return best}
+function chooseBestCandidate(people,as,cfg){const cov=coverageForAssignments(as,cfg);let best=null;for(const p of people){if(as.some(a=>a.staff.id===p.staff.id))continue;for(const c of p.candidates){let benefit=0,extra=0;for(let h=c.start;h<c.end;h++){if(h<cfg.open||h>=cfg.last)continue;const need=Math.max(0,requiredAt(h,cfg)-(cov[h]||0));if(need>0)benefit+=need;else extra++}if(!benefit)continue;/* 必要人数を最優先。その中で、希望日数に対して実際の割当が少ない人を優先する。fairnessBonus は1時間分の不足を逆転しない範囲に抑える。 */const fairnessBonus=Number(p.fairnessBonus||0);const score=benefit*100+fairnessBonus-extra*3-(c.end-c.start);if(!best||score>best.score)best={...c,staff:p.staff,request:p.request,fixed:false,score}}}return best}
 function optimizeAssignments(as,people,cfg){for(const a of as.filter(x=>!x.fixed)){const p=people.find(x=>x.staff.id===a.staff.id);if(!p)continue;for(const c of p.candidates.slice().sort((x,y)=>(x.end-x.start)-(y.end-y.start))){const test=as.map(x=>x===a?{...a,start:c.start,end:c.end}:x);if(deficits(coverageForAssignments(test,cfg),cfg).length===0){a.start=c.start;a.end=c.end;break}}}}
 function formatAssignment(a,cfg){if(a.fill&&a.fillDisplay)return `${a.fillDisplay} NP`;return `${displayHour(a.start,cfg.last)}〜${displayHour(a.end,cfg.last)} NP`}
 const AUTO_MEMORY_KEY='shiftManagerAutoConfigV12';
@@ -1165,6 +1165,23 @@ async function runAutoSchedule(){
   const fillSettings=readFillStaffSettings();
   const fillUseCount=new Map();
 
+  // 希望に対して実際のシフトが極端に少ない人が出ないよう、週全体の割当バランスを取る。
+  // 例：7日希望で1日しか入っていない人は、同程度に不足を埋められる候補の中で優先される。
+  const requestedDaysByStaff=new Map();
+  for(const r of requests.filter(r=>isInRequestWeek(r)&&r.status==='approved'&&r.request_type!=='off')){
+    const st=requestStaff(r);if(!st)continue;
+    const sid=String(st.id);requestedDaysByStaff.set(sid,(requestedDaysByStaff.get(sid)||0)+1);
+  }
+  const assignedDaysByStaff=new Map();
+  const fairnessBonusFor=(staffId)=>{
+    const sid=String(staffId),wanted=requestedDaysByStaff.get(sid)||0;
+    if(!wanted)return 0;
+    const assigned=assignedDaysByStaff.get(sid)||0;
+    const ratio=Math.min(1,assigned/wanted);
+    // 最大でも約84点。必要人数を1時間多く埋める候補（100点差）を逆転させない。
+    return Math.round((1-ratio)*70+Math.min(7,wanted)*2);
+  };
+
   // 休み自由スタッフの「通常勤務時間」は、その週で最も多い出勤希望時間を使う。
   let flexBase=null;
   if(flexStaffId){
@@ -1217,7 +1234,7 @@ async function runAutoSchedule(){
 
     let guard=0;
     while(deficits(coverageForAssignments(as,cfg),cfg).length&&guard++<50){
-      const eligible=people.filter(p=>!p.flex||flexCanWork());
+      const eligible=people.filter(p=>!p.flex||flexCanWork()).map(p=>({...p,fairnessBonus:fairnessBonusFor(p.staff.id)}));
       const best=chooseBestCandidate(eligible,as,cfg);
       if(!best)break;
       const src=people.find(p=>String(p.staff.id)===String(best.staff.id));
@@ -1249,7 +1266,12 @@ async function runAutoSchedule(){
 
     const rem=deficits(coverageForAssignments(as,cfg),cfg);
     if(rem.length){let groups=[],cur=null;for(const x of rem){if(!cur||x.h!==cur.end||x.d!==cur.d){cur={start:x.h,end:x.h+1,d:x.d};groups.push(cur)}else cur.end=x.h+1}groups.forEach(g=>warnings.push(`${cfg.date}: ${displayHour(g.start,cfg.last)}〜${displayHour(g.end,cfg.last)} ${g.d}人不足`));}
-    as.forEach(a=>allAssignments.push({cfg,...a}));
+    // この日の割当を週バランスへ反映。固定OPEN・穴埋めも実勤務1日として数える。
+    for(const a of as){
+      const sid=String(a.staff.id);
+      assignedDaysByStaff.set(sid,(assignedDaysByStaff.get(sid)||0)+1);
+      allAssignments.push({cfg,...a});
+    }
   }
 
   if(!allAssignments.length)return alert('条件に合うシフトを作成できませんでした。');
@@ -1260,6 +1282,9 @@ async function runAutoSchedule(){
   }
   const fillUsed=[...fillUseCount.entries()].filter(([,n])=>n>0).map(([id,n])=>`${staff.find(x=>String(x.id)===id)?.name||'穴埋め'} ${n}回`);
   if(fillUsed.length)warnings.unshift(`穴埋め使用：${fillUsed.join(' / ')}`);
+  const balanceSummary=[...requestedDaysByStaff.entries()].map(([id,wanted])=>({name:staff.find(x=>String(x.id)===id)?.name||'スタッフ',wanted,assigned:assignedDaysByStaff.get(id)||0})).filter(x=>x.wanted>0).sort((a,b)=>(a.assigned/a.wanted)-(b.assigned/b.wanted));
+  const lowest=balanceSummary.filter(x=>x.assigned<x.wanted).slice(0,3);
+  if(lowest.length)warnings.unshift(`希望バランス：${lowest.map(x=>`${x.name} ${x.assigned}/${x.wanted}日`).join(' / ')}`);
   if(!confirm(`${allAssignments.length}件のNPシフト案を作成します。${warnings.length?`\n不足・確認事項 ${warnings.length}件あり`:''}`))return;
 
   // staff_id + date はDBで一意。保存前に同じスタッフ・同じ日の既存シフトを確実に消してからINSERTする。
